@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>在留資格更新 管理 | StarBoard</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --card:#fff; --ink:#1f2937; --sub:#6b7280; --line:#e5e7eb;
+    --blue:#2563eb; --blued:#1e40af;
+    --red:#dc2626; --redbg:#fee2e2; --org:#ea580c; --orgbg:#ffedd5;
+    --amb:#ca8a04; --ambbg:#fef9c3; --grn:#16a34a; --grnbg:#dcfce7; --gray:#9ca3af; --graybg:#f3f4f6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  header{background:var(--blued);color:#fff;padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:17px;margin:0;font-weight:700}
+  header .sp{flex:1}
+  header .who{font-size:12px;opacity:.85}
+  button{cursor:pointer;border:none;border-radius:6px;padding:7px 13px;font-size:13px;font-weight:600}
+  .btn-primary{background:var(--blue);color:#fff}
+  .btn-ghost{background:rgba(255,255,255,.15);color:#fff}
+  .btn-sm{padding:4px 9px;font-size:12px}
+  .btn-light{background:#eef2ff;color:var(--blued)}
+  main{max-width:1200px;margin:0 auto;padding:18px 16px 60px}
+  /* dashboard */
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .card .n{font-size:24px;font-weight:800;line-height:1}
+  .card .l{font-size:12px;color:var(--sub);margin-top:5px}
+  .card.alert{border-color:var(--red)} .card.alert .n{color:var(--red)}
+  .card.warn{border-color:var(--org)} .card.warn .n{color:var(--org)}
+  /* filters */
+  .filters{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .filters select,.filters input{padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-size:13px}
+  .filters input[type=search]{min-width:180px}
+  /* table */
+  .wrap{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;min-width:900px}
+  th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{background:#f9fafb;font-size:12px;color:var(--sub);position:sticky;top:0;cursor:pointer;user-select:none}
+  td.memo{white-space:normal;max-width:260px;color:var(--sub);font-size:12px}
+  tr:hover td{background:#fafbff}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
+  .s-未対応{background:var(--redbg);color:var(--red)} .s-対応中{background:var(--ambbg);color:var(--amb)}
+  .s-完了{background:var(--grnbg);color:var(--grn)} .s-対象外{background:var(--graybg);color:var(--gray)}
+  .days{font-weight:700}
+  .d-over{color:var(--red)} .d-30{color:var(--org)} .d-60{color:var(--amb)} .d-90{color:#0891b2} .d-far{color:var(--sub)}
+  .m-未確定{color:var(--red);font-weight:700}
+  /* modal */
+  .ov{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:flex-start;justify-content:center;padding:40px 12px;overflow:auto;z-index:50}
+  .ov.show{display:flex}
+  .modal{background:#fff;border-radius:12px;width:100%;max-width:520px;padding:20px}
+  .modal h2{margin:0 0 14px;font-size:16px}
+  .fg{margin-bottom:12px} .fg label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px;font-weight:600}
+  .fg input,.fg select,.fg textarea{width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .modal .actions{display:flex;justify-content:space-between;gap:8px;margin-top:16px}
+  /* login */
+  #login{max-width:360px;margin:80px auto;background:#fff;border:1px solid var(--line);border-radius:12px;padding:28px}
+  #login h1{font-size:18px;margin:0 0 4px} #login p{color:var(--sub);margin:0 0 18px;font-size:13px}
+  #login input{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;margin-bottom:10px;font-size:14px}
+  #login button{width:100%;padding:11px}
+  .err{color:var(--red);font-size:12px;margin-top:8px;min-height:16px}
+  .hint{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px;font-size:12px;color:#92400e;margin-bottom:14px}
+</style>
+</head>
+<body>
+
+<!-- ===== ログイン画面 ===== -->
+<div id="login">
+  <h1>在留資格更新 管理</h1>
+  <p>StarBoard 社内システム</p>
+  <div id="cfgWarn" class="hint" style="display:none">
+    ⚠️ Supabaseの接続情報が未設定です。<code>web/index.html</code> 冒頭の <code>SUPABASE_URL</code> / <code>SUPABASE_ANON_KEY</code> を設定してください。
+  </div>
+  <input id="email" type="email" placeholder="メールアドレス" autocomplete="username">
+  <input id="pass" type="password" placeholder="パスワード" autocomplete="current-password">
+  <button class="btn-primary" onclick="doLogin()">ログイン</button>
+  <div class="err" id="loginErr"></div>
+</div>
+
+<!-- ===== アプリ本体 ===== -->
+<div id="app" style="display:none">
+  <header>
+    <h1>在留資格更新 管理</h1>
+    <span class="who" id="whoami"></span>
+    <span class="sp"></span>
+    <button class="btn-primary btn-sm" onclick="openForm()">＋ 新規追加</button>
+    <button class="btn-ghost btn-sm" onclick="loadAll()">↻ 更新</button>
+    <button class="btn-ghost btn-sm" onclick="doLogout()">ログアウト</button>
+  </header>
+
+  <main>
+    <div class="cards" id="cards"></div>
+
+    <div class="filters">
+      <select id="fStatus"><option value="">ステータス：すべて</option>
+        <option>未対応</option><option>対応中</option><option>完了</option><option>対象外</option></select>
+      <select id="fMethod"><option value="">対応方法：すべて</option>
+        <option>所属機関と本人</option><option>玉田先生</option><option>Rakuvisa</option><option>西山先生</option><option>未確定</option></select>
+      <select id="fFac"><option value="">施設：すべて</option></select>
+      <input type="search" id="fText" placeholder="人材名・施設・備考で検索">
+      <label style="font-size:12px;color:var(--sub)"><input type="checkbox" id="fActive"> 未対応・対応中のみ</label>
+    </div>
+
+    <div class="wrap">
+      <table>
+        <thead><tr>
+          <th data-k="deadline">更新期日 ▲</th><th data-k="days_left">残日数</th>
+          <th data-k="facility_name">施設・法人</th><th data-k="person_name">人材</th>
+          <th data-k="renewal_count">回数</th><th data-k="method">対応方法</th>
+          <th data-k="status">状況</th><th data-k="explained_on">説明日</th>
+          <th>備考</th><th></th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <p id="count" style="color:var(--sub);font-size:12px;margin-top:8px"></p>
+  </main>
+</div>
+
+<!-- ===== 追加・編集モーダル ===== -->
+<div class="ov" id="ov">
+  <div class="modal">
+    <h2 id="mTitle">新規追加</h2>
+    <input type="hidden" id="mId">
+    <div class="row2">
+      <div class="fg"><label>更新期日 *</label><input type="date" id="mDeadline"></div>
+      <div class="fg"><label>顧客説明日</label><input type="date" id="mExpl"></div>
+    </div>
+    <div class="fg"><label>施設・法人名 *</label>
+      <select id="mFac"></select>
+      <input id="mFacNew" placeholder="＋新しい施設名（ここに入力すると新規登録）" style="margin-top:6px">
+    </div>
+    <div class="row2">
+      <div class="fg"><label>人材名 *</label><input id="mPerson"></div>
+      <div class="fg"><label>更新回数</label>
+        <select id="mCount"><option>初</option><option>2</option><option>3</option><option>4</option><option>5</option><option>特技初</option></select></div>
+    </div>
+    <div class="row2">
+      <div class="fg"><label>対応方法 *</label>
+        <select id="mMethod"><option>未確定</option><option>所属機関と本人</option><option>玉田先生</option><option>Rakuvisa</option><option>西山先生</option></select></div>
+      <div class="fg"><label>状況 *</label>
+        <select id="mStatus"><option>未対応</option><option>対応中</option><option>完了</option><option>対象外</option></select></div>
+    </div>
+    <div class="fg"><label>Rakuvisa ID</label><input id="mRak"></div>
+    <div class="fg"><label>備考</label><textarea id="mMemo" rows="2"></textarea></div>
+    <div class="actions">
+      <button class="btn-sm" id="mDel" style="background:var(--redbg);color:var(--red)" onclick="delItem()">削除</button>
+      <div>
+        <button class="btn-sm" style="background:#eef2f7" onclick="closeForm()">キャンセル</button>
+        <button class="btn-primary btn-sm" onclick="saveItem()">保存</button>
+      </div>
+    </div>
+    <div class="err" id="mErr"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// ================== 設定（Supabase作成後に差し替え） ==================
+const SUPABASE_URL      = "https://oentffklzflubrhxomfn.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable__uz-Vm3FUPgAeKJC2UYQhA_jp4hwu48";
+// ====================================================================
+
+let sb, ROWS=[], FACS=[], sortKey="deadline", sortAsc=true;
+
+function cfgReady(){ return !SUPABASE_URL.includes("REPLACE_ME") && !SUPABASE_ANON_KEY.includes("REPLACE_ME"); }
+
+window.addEventListener("DOMContentLoaded", async ()=>{
+  if(!cfgReady()){ document.getElementById("cfgWarn").style.display="block"; return; }
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session) showApp(session);
+  document.querySelectorAll("th[data-k]").forEach(th=>th.onclick=()=>setSort(th.dataset.k));
+  ["fStatus","fMethod","fFac","fActive"].forEach(id=>document.getElementById(id).onchange=render);
+  document.getElementById("fText").oninput=render;
+  document.getElementById("pass").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
+});
+
+async function doLogin(){
+  const email=document.getElementById("email").value.trim();
+  const pass=document.getElementById("pass").value;
+  const { data, error } = await sb.auth.signInWithPassword({email,password:pass});
+  if(error){ document.getElementById("loginErr").textContent="ログイン失敗: "+error.message; return; }
+  showApp(data.session);
+}
+async function doLogout(){ await sb.auth.signOut(); location.reload(); }
+
+function showApp(session){
+  document.getElementById("login").style.display="none";
+  document.getElementById("app").style.display="block";
+  document.getElementById("whoami").textContent=session.user.email;
+  loadAll();
+}
+
+async function loadAll(){
+  const [{data:facs}, {data:rows, error}] = await Promise.all([
+    sb.from("visa_facilities").select("*").order("name"),
+    sb.from("visa_renewals_view").select("*").order("deadline")
+  ]);
+  if(error){ alert("読込エラー: "+error.message); return; }
+  FACS=facs||[]; ROWS=rows||[];
+  // 施設フィルタ & フォームの選択肢
+  const opt = FACS.map(f=>`<option>${esc(f.name)}</option>`).join("");
+  document.getElementById("fFac").innerHTML='<option value="">施設：すべて</option>'+opt;
+  document.getElementById("mFac").innerHTML='<option value="">— 選択 —</option>'+opt;
+  renderCards(); render();
+}
+
+function renderCards(){
+  const c=n=>ROWS.filter(n).length;
+  const cUntouched=c(r=>r.status==="未対応"), cDoing=c(r=>r.status==="対応中"),
+        cDone=c(r=>r.status==="完了"), cSkip=c(r=>r.status==="対象外");
+  const over=c(r=>ACTIVE(r)&&r.days_left<0);
+  const d30=c(r=>ACTIVE(r)&&r.days_left>=0&&r.days_left<=30);
+  const now=new Date(), ym=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
+  const thisM=c(r=>ACTIVE(r)&&(r.deadline||"").startsWith(ym));
+  const cards=[
+    ["alert",over,"期限超過(未処理)"],["warn",d30,"30日以内(未処理)"],["",thisM,"今月期限(未処理)"],
+    ["",cUntouched,"未対応"],["",cDoing,"対応中"],["",cDone,"完了"],["",cSkip,"対象外"]
+  ];
+  document.getElementById("cards").innerHTML=cards.map(([cl,n,l])=>
+    `<div class="card ${cl}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+}
+const ACTIVE=r=>r.status==="未対応"||r.status==="対応中";
+
+function setSort(k){ if(sortKey===k)sortAsc=!sortAsc; else{sortKey=k;sortAsc=true;} render(); }
+
+function render(){
+  const fs=document.getElementById("fStatus").value, fm=document.getElementById("fMethod").value,
+        ff=document.getElementById("fFac").value, ft=document.getElementById("fText").value.trim(),
+        fa=document.getElementById("fActive").checked;
+  let list=ROWS.filter(r=>{
+    if(fs&&r.status!==fs)return false;
+    if(fm&&r.method!==fm)return false;
+    if(ff&&r.facility_name!==ff)return false;
+    if(fa&&!ACTIVE(r))return false;
+    if(ft){ const h=(r.person_name+r.facility_name+(r.memo||"")).toLowerCase(); if(!h.includes(ft.toLowerCase()))return false; }
+    return true;
+  });
+  list.sort((a,b)=>{
+    let x=a[sortKey],y=b[sortKey]; if(x==null)x=""; if(y==null)y="";
+    return (x<y?-1:x>y?1:0)*(sortAsc?1:-1);
+  });
+  document.getElementById("tbody").innerHTML=list.map(rowHtml).join("")||
+    `<tr><td colspan="10" style="text-align:center;color:var(--sub);padding:24px">該当なし</td></tr>`;
+  document.getElementById("count").textContent=`表示 ${list.length} 件 / 全 ${ROWS.length} 件`;
+}
+
+function daysClass(d){ if(d==null)return"d-far"; if(d<0)return"d-over"; if(d<=30)return"d-30"; if(d<=60)return"d-60"; if(d<=90)return"d-90"; return"d-far"; }
+function daysText(d){ if(d==null)return"—"; if(d<0)return`${Math.abs(d)}日超過`; return`残${d}日`; }
+
+function rowHtml(r){
+  const dc = ACTIVE(r)?daysClass(r.days_left):"d-far";
+  return `<tr>
+    <td>${r.deadline||""}</td>
+    <td class="days ${dc}">${ACTIVE(r)?daysText(r.days_left):"—"}</td>
+    <td>${esc(r.facility_name)}</td>
+    <td>${esc(r.person_name)}</td>
+    <td>${esc(r.renewal_count||"")}</td>
+    <td class="m-${r.method}">${esc(r.method)}</td>
+    <td><span class="pill s-${r.status}">${r.status}</span></td>
+    <td>${r.explained_on||""}</td>
+    <td class="memo">${esc(r.memo||"")}</td>
+    <td><button class="btn-sm btn-light" onclick='openForm(${JSON.stringify(r.id)})'>編集</button></td>
+  </tr>`;
+}
+
+// ---------- フォーム ----------
+function openForm(id){
+  const m=id?ROWS.find(r=>r.id===id):null;
+  document.getElementById("mTitle").textContent=m?"編集":"新規追加";
+  document.getElementById("mId").value=m?m.id:"";
+  document.getElementById("mDeadline").value=m?m.deadline:"";
+  document.getElementById("mExpl").value=m?.explained_on||"";
+  document.getElementById("mFac").value=m?m.facility_name:"";
+  document.getElementById("mFacNew").value="";
+  document.getElementById("mPerson").value=m?m.person_name:"";
+  document.getElementById("mCount").value=m?.renewal_count||"初";
+  document.getElementById("mMethod").value=m?m.method:"未確定";
+  document.getElementById("mStatus").value=m?m.status:"未対応";
+  document.getElementById("mRak").value=m?.rakuvisa_id||"";
+  document.getElementById("mMemo").value=m?.memo||"";
+  document.getElementById("mDel").style.display=m?"block":"none";
+  document.getElementById("mErr").textContent="";
+  document.getElementById("ov").classList.add("show");
+}
+function closeForm(){ document.getElementById("ov").classList.remove("show"); }
+
+async function ensureFacility(name){
+  let f=FACS.find(x=>x.name===name);
+  if(f)return f.id;
+  const {data,error}=await sb.from("visa_facilities").insert({name}).select().single();
+  if(error)throw error;
+  FACS.push(data); return data.id;
+}
+
+async function saveItem(){
+  const err=document.getElementById("mErr"); err.textContent="";
+  try{
+    const newFac=document.getElementById("mFacNew").value.trim();
+    const facName=newFac||document.getElementById("mFac").value;
+    const deadline=document.getElementById("mDeadline").value;
+    const person=document.getElementById("mPerson").value.trim();
+    if(!deadline||!facName||!person){ err.textContent="更新期日・施設・人材名は必須です。"; return; }
+    const facility_id=await ensureFacility(facName);
+    const rec={
+      deadline, facility_id, person_name:person,
+      renewal_count:document.getElementById("mCount").value,
+      method:document.getElementById("mMethod").value,
+      status:document.getElementById("mStatus").value,
+      explained_on:document.getElementById("mExpl").value||null,
+      rakuvisa_id:document.getElementById("mRak").value.trim()||null,
+      memo:document.getElementById("mMemo").value.trim()||null,
+    };
+    const id=document.getElementById("mId").value;
+    const res=id ? await sb.from("visa_renewals").update(rec).eq("id",id)
+                 : await sb.from("visa_renewals").insert(rec);
+    if(res.error)throw res.error;
+    closeForm(); await loadAll();
+  }catch(e){ err.textContent="保存エラー: "+(e.message||e); }
+}
+
+async function delItem(){
+  const id=document.getElementById("mId").value;
+  if(!id||!confirm("この案件を削除します。よろしいですか？"))return;
+  const {error}=await sb.from("visa_renewals").delete().eq("id",id);
+  if(error){ document.getElementById("mErr").textContent="削除エラー: "+error.message; return; }
+  closeForm(); await loadAll();
+}
+
+function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+</script>
+</body>
+</html>
