@@ -88,6 +88,16 @@
   .msg-btns .msg-w{background:#16a34a;color:#fff}
   .msg-btns .msg-o{background:#0ea5e9;color:#fff}
   .msg-ok{font-size:11.5px;color:var(--grn);font-weight:700;margin-top:8px;min-height:15px}
+  /* 在留カード画像 */
+  .card-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .card-side{border:1px solid var(--line);border-radius:8px;padding:10px;text-align:center}
+  .cs-h{font-size:12px;font-weight:700;margin-bottom:6px}
+  .cs-ok{color:var(--grn);font-size:11px;margin-left:4px}
+  .card-thumb{max-width:100%;max-height:130px;border-radius:6px;border:1px solid var(--line);display:block;margin:0 auto 8px}
+  .cs-empty{font-size:11px;color:var(--sub);background:var(--graybg);border-radius:6px;padding:22px 0;margin-bottom:8px}
+  .cs-act{display:flex;gap:6px;justify-content:center}
+  .cs-up{background:#6366f1;color:#fff}
+  .cs-del{background:var(--redbg);color:var(--red)}
 </style>
 </head>
 <body>
@@ -173,6 +183,7 @@
     </div>
     <div class="fg"><label>Rakuvisa ID</label><input id="mRak"></div>
     <div class="fg"><label>備考</label><textarea id="mMemo" rows="2"></textarea></div>
+    <div class="chk-sec" id="cardSec"></div>
     <div class="chk-sec" id="chkSec"></div>
     <div class="actions">
       <button class="btn-sm" id="mDel" style="background:var(--redbg);color:var(--red)" onclick="delItem()">削除</button>
@@ -343,6 +354,63 @@ function collectChecklist(visaType){
   }
   return out;
 }
+// ===== 在留カード画像 =====
+async function renderCardSection(row){
+  const sec=document.getElementById("cardSec");
+  if(!row || !row.id){
+    sec.innerHTML=`<h3>在留カード画像</h3><p class="note">案件を「保存」すると、在留カードの写真をアップロードできます。</p>`;
+    return;
+  }
+  sec.innerHTML=`<h3>在留カード画像</h3><p class="note">表面・裏面の写真を登録しておくと、在留期限をいつでも確認できます。</p>
+    <div class="card-grid">
+      <div id="cardBox_front"></div><div id="cardBox_back"></div>
+    </div>`;
+  cardSideHtml("front","表面",row.card_front);
+  cardSideHtml("back","裏面",row.card_back);
+}
+async function cardSideHtml(side,label,path){
+  const box=document.getElementById("cardBox_"+side); if(!box) return;
+  let thumb=`<div class="cs-empty">未登録</div>`;
+  if(path){
+    const {data}=await sb.storage.from("zairyu-cards").createSignedUrl(path,3600);
+    if(data&&data.signedUrl){
+      const u=data.signedUrl+"&_t="+Date.now();
+      thumb=`<a href="${u}" target="_blank" rel="noopener"><img src="${u}" class="card-thumb" alt="${label}"></a>`;
+    }
+  }
+  box.className="card-side";
+  box.innerHTML=`<div class="cs-h">${label}${path?'<span class="cs-ok">✓ 登録済</span>':''}</div>
+    ${thumb}
+    <input type="file" id="cardFile_${side}" accept="image/*" style="display:none" onchange="uploadCard('${side}')">
+    <div class="cs-act">
+      <button type="button" class="btn-sm cs-up" onclick="document.getElementById('cardFile_${side}').click()">${path?'差し替え':'画像を選ぶ'}</button>
+      ${path?`<button type="button" class="btn-sm cs-del" onclick="deleteCard('${side}')">削除</button>`:''}
+    </div>`;
+}
+async function uploadCard(side){
+  const id=document.getElementById("mId").value;
+  if(!id){ alert("先に「保存」してからアップロードしてください。"); return; }
+  const file=document.getElementById("cardFile_"+side).files[0]; if(!file) return;
+  const box=document.getElementById("cardBox_"+side); if(box) box.innerHTML='<p class="note">アップロード中...</p>';
+  const path=`${id}/${side}`;
+  const {error}=await sb.storage.from("zairyu-cards").upload(path,file,{upsert:true,contentType:file.type});
+  if(error){ alert("アップロード失敗: "+error.message); const r=ROWS.find(x=>x.id===id); cardSideHtml(side,side==="front"?"表面":"裏面",r&&r[side==="front"?"card_front":"card_back"]); return; }
+  const col=side==="front"?"card_front":"card_back";
+  const {error:e2}=await sb.from("visa_renewals").update({[col]:path}).eq("id",id);
+  if(e2){ alert("保存失敗: "+e2.message); return; }
+  const row=ROWS.find(x=>x.id===id); if(row) row[col]=path;
+  cardSideHtml(side, side==="front"?"表面":"裏面", path);
+}
+async function deleteCard(side){
+  const id=document.getElementById("mId").value; if(!id) return;
+  if(!confirm("この画像を削除しますか？")) return;
+  await sb.storage.from("zairyu-cards").remove([`${id}/${side}`]);
+  const col=side==="front"?"card_front":"card_back";
+  await sb.from("visa_renewals").update({[col]:null}).eq("id",id);
+  const row=ROWS.find(x=>x.id===id); if(row) row[col]=null;
+  cardSideHtml(side, side==="front"?"表面":"裏面", null);
+}
+
 function chkProgress(r){
   const tmpl=CHECKLISTS[r.visa_type]; if(!tmpl) return null;
   const cl=r.checklist||{};
@@ -446,7 +514,7 @@ function rowHtml(r){
     <td>${r.deadline||""}</td>
     <td class="days ${dc}">${ACTIVE(r)?daysText(r.days_left):"—"}</td>
     <td>${esc(r.facility_name)}</td>
-    <td>${esc(r.person_name)}</td>
+    <td>${esc(r.person_name)}${(r.card_front||r.card_back)?' <span title="在留カード画像あり">🪪</span>':''}</td>
     <td>${esc(r.renewal_count||"")}</td>
     <td class="m-${r.method}">${esc(r.method)}</td>
     <td><span class="pill s-${r.status}">${r.status}</span></td>
@@ -475,6 +543,7 @@ function openForm(id){
   const vt=m?.visa_type||"特定技能";
   const mVisa=document.getElementById("mVisa"); mVisa.value=vt; mVisa.dataset.prev=vt;
   renderChecklist(vt, m?.checklist||{});
+  renderCardSection(m);
   document.getElementById("mDel").style.display=m?"block":"none";
   document.getElementById("mErr").textContent="";
   document.getElementById("ov").classList.add("show");
