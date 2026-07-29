@@ -104,6 +104,11 @@
   .cs-act{display:flex;gap:6px;justify-content:center}
   .cs-up{background:#6366f1;color:#fff}
   .cs-del{background:var(--redbg);color:var(--red)}
+  /* 施設管理 */
+  .fac-row{display:grid;grid-template-columns:1fr 150px;gap:8px;margin-bottom:8px}
+  .fac-row input{padding:7px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;width:100%}
+  .fac-head{display:grid;grid-template-columns:1fr 150px;gap:8px;font-size:11px;color:var(--sub);font-weight:700;margin-bottom:4px;padding:0 2px}
+  #facList{max-height:60vh;overflow-y:auto;padding-right:4px}
 </style>
 </head>
 <body>
@@ -128,6 +133,7 @@
     <span class="who" id="whoami"></span>
     <span class="sp"></span>
     <button class="btn-primary btn-sm" onclick="openForm()">＋ 新規追加</button>
+    <button class="btn-ghost btn-sm" onclick="openFacilities()">🏢 施設管理</button>
     <button class="btn-ghost btn-sm" onclick="loadAll()">↻ 更新</button>
     <button class="btn-ghost btn-sm" onclick="doLogout()">ログアウト</button>
   </header>
@@ -177,10 +183,11 @@
       <input id="mFacNew" placeholder="＋新しい施設名（ここに入力すると新規登録）" style="margin-top:6px">
     </div>
     <div class="row2">
-      <div class="fg"><label>人材名 *</label><input id="mPerson"></div>
-      <div class="fg"><label>更新回数</label>
-        <select id="mCount"><option>初</option><option>2</option><option>3</option><option>4</option><option>5</option><option>特技初</option></select></div>
+      <div class="fg"><label>人材 正式名称 *</label><input id="mPerson" placeholder="例）Muhammad Arifin"></div>
+      <div class="fg"><label>ニックネーム</label><input id="mNick" placeholder="例）アリフィン"></div>
     </div>
+    <div class="fg"><label>更新回数</label>
+      <select id="mCount"><option>初</option><option>2</option><option>3</option><option>4</option><option>5</option><option>特技初</option></select></div>
     <div class="row2">
       <div class="fg"><label>対応方法 *</label>
         <select id="mMethod"><option>未確定</option><option>所属機関と本人</option><option>玉田先生</option><option>Rakuvisa</option><option>西山先生</option></select></div>
@@ -199,6 +206,23 @@
       </div>
     </div>
     <div class="err" id="mErr"></div>
+  </div>
+</div>
+
+<!-- ===== 施設管理モーダル ===== -->
+<div class="ov" id="facOv">
+  <div class="modal" style="max-width:640px">
+    <h2>施設・法人 管理</h2>
+    <p class="note" style="font-size:12px;color:var(--sub);margin:0 0 12px">正式名称と略称を編集できます。正式名称を直すと、その施設の全案件に反映されます。</p>
+    <div id="facList"></div>
+    <div class="actions">
+      <span></span>
+      <div>
+        <button class="btn-sm" style="background:#eef2f7" onclick="closeFacilities()">閉じる</button>
+        <button class="btn-primary btn-sm" onclick="saveFacilities()">保存</button>
+      </div>
+    </div>
+    <div class="err" id="facErr"></div>
   </div>
 </div>
 
@@ -302,10 +326,13 @@ function buildOrgMsg(facility, name, cl){
 async function copyMsg(kind){
   const vt=document.getElementById("mVisa").value;
   if(vt!=="特定技能"){ alert("この在留資格のメッセージは現在『特定技能』のみ対応しています。"); return; }
-  const name=(document.getElementById("mPerson").value||"").trim()||"（お名前）";
+  const official=(document.getElementById("mPerson").value||"").trim();
+  const nick=(document.getElementById("mNick").value||"").trim();
   const fac=(document.getElementById("mFacNew").value.trim()||document.getElementById("mFac").value||"（貴社）");
   const cl=collectChecklist(vt);
-  const text = kind==="worker" ? buildWorkerMsg(name,cl) : buildOrgMsg(fac,name,cl);
+  // 人材向けは呼びかけにニックネーム（なければ正式名称）／所属機関向けは正式名称
+  const text = kind==="worker" ? buildWorkerMsg(nick||official||"（お名前）",cl)
+                               : buildOrgMsg(fac, official||nick||"（お名前）", cl);
   try{ await navigator.clipboard.writeText(text); }
   catch(e){ const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
     document.body.appendChild(ta); ta.select(); try{document.execCommand("copy");}catch(_){}
@@ -460,8 +487,9 @@ async function loadAll(){
   ]);
   if(error){ alert("読込エラー: "+error.message); return; }
   FACS=facs||[]; ROWS=rows||[];
-  // 施設フィルタ & フォームの選択肢
-  const opt = FACS.map(f=>`<option>${esc(f.name)}</option>`).join("");
+  // 施設フィルタ & フォームの選択肢（表示=正式名称（略称）／値=正式名称）
+  const opt = FACS.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"","ja"))
+    .map(f=>`<option value="${esc(f.name)}">${esc(facLabel(f))}</option>`).join("");
   document.getElementById("fFac").innerHTML='<option value="">施設：すべて</option>'+opt;
   document.getElementById("mFac").innerHTML='<option value="">— 選択 —</option>'+opt;
   renderCards(); render();
@@ -484,6 +512,15 @@ function renderCards(){
 }
 const ACTIVE=r=>r.status==="未対応"||r.status==="対応中";
 
+// 正式名称（サブ名）表示のヘルパー（同一なら1つだけ表示）
+function withSub(main, sub){
+  main=(main||"").trim(); sub=(sub||"").trim();
+  return (main&&sub&&main!==sub) ? `${main}（${sub}）` : (main||sub);
+}
+function personDisp(r){ return withSub(r.person_name, r.nickname); }
+function facilityDisp(r){ return withSub(r.facility_name, r.facility_short); }
+function facLabel(f){ return withSub(f.name, f.short_name); }
+
 function setSort(k){ if(sortKey===k)sortAsc=!sortAsc; else{sortKey=k;sortAsc=true;} render(); }
 
 function render(){
@@ -495,7 +532,7 @@ function render(){
     if(fm&&r.method!==fm)return false;
     if(ff&&r.facility_name!==ff)return false;
     if(fa&&!ACTIVE(r))return false;
-    if(ft){ const h=(r.person_name+r.facility_name+(r.memo||"")).toLowerCase(); if(!h.includes(ft.toLowerCase()))return false; }
+    if(ft){ const h=[r.person_name,r.nickname,r.facility_name,r.facility_short,r.memo].join(" ").toLowerCase(); if(!h.includes(ft.toLowerCase()))return false; }
     return true;
   });
   list.sort((a,b)=>{
@@ -519,8 +556,8 @@ function rowHtml(r){
   return `<tr>
     <td>${r.deadline||""}</td>
     <td class="days ${dc}">${ACTIVE(r)?daysText(r.days_left):"—"}</td>
-    <td>${esc(r.facility_name)}</td>
-    <td>${esc(r.person_name)}${(r.card_front||r.card_back)?' <span title="在留カード画像あり">🪪</span>':''}</td>
+    <td>${esc(facilityDisp(r))}</td>
+    <td>${esc(personDisp(r))}${(r.card_front||r.card_back)?' <span title="在留カード画像あり">🪪</span>':''}</td>
     <td>${esc(r.renewal_count||"")}</td>
     <td class="m-${r.method}">${esc(r.method)}</td>
     <td><span class="pill s-${r.status}">${r.status}</span></td>
@@ -541,6 +578,7 @@ function openForm(id){
   document.getElementById("mFac").value=m?m.facility_name:"";
   document.getElementById("mFacNew").value="";
   document.getElementById("mPerson").value=m?m.person_name:"";
+  document.getElementById("mNick").value=m?.nickname||"";
   document.getElementById("mCount").value=m?.renewal_count||"初";
   document.getElementById("mMethod").value=m?m.method:"未確定";
   document.getElementById("mStatus").value=m?m.status:"未対応";
@@ -555,6 +593,41 @@ function openForm(id){
   document.getElementById("ov").classList.add("show");
 }
 function closeForm(){ document.getElementById("ov").classList.remove("show"); }
+
+// ---------- 施設管理 ----------
+function openFacilities(){
+  const list=document.getElementById("facList");
+  const sorted=FACS.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||"","ja"));
+  list.innerHTML=`<div class="fac-head"><div>正式名称</div><div>略称</div></div>`+
+    sorted.map(f=>`<div class="fac-row" data-id="${f.id}">
+      <input class="fName" value="${esc(f.name||"")}" placeholder="正式名称">
+      <input class="fShort" value="${esc(f.short_name||"")}" placeholder="略称">
+    </div>`).join("");
+  document.getElementById("facErr").textContent="";
+  document.getElementById("facOv").classList.add("show");
+}
+function closeFacilities(){ document.getElementById("facOv").classList.remove("show"); }
+async function saveFacilities(){
+  const err=document.getElementById("facErr"); err.textContent="";
+  const rows=[...document.querySelectorAll("#facList .fac-row")];
+  const updates=[];
+  for(const el of rows){
+    const id=el.dataset.id;
+    const name=el.querySelector(".fName").value.trim();
+    const short=el.querySelector(".fShort").value.trim()||null;
+    const cur=FACS.find(f=>f.id===id); if(!cur) continue;
+    if(!name){ err.textContent="正式名称は空にできません。"; return; }
+    if(name!==(cur.name||"") || short!==(cur.short_name||null)) updates.push({id,name,short_name:short});
+  }
+  if(!updates.length){ closeFacilities(); return; }
+  try{
+    for(const u of updates){
+      const {error}=await sb.from("visa_facilities").update({name:u.name,short_name:u.short_name}).eq("id",u.id);
+      if(error) throw new Error((error.message||error)+"（正式名称が他施設と重複していないかご確認ください）");
+    }
+    closeFacilities(); await loadAll();
+  }catch(e){ err.textContent="保存エラー: "+(e.message||e); }
+}
 
 async function ensureFacility(name){
   let f=FACS.find(x=>x.name===name);
@@ -576,6 +649,7 @@ async function saveItem(){
     const visaType=document.getElementById("mVisa").value;
     const rec={
       deadline, facility_id, person_name:person,
+      nickname:document.getElementById("mNick").value.trim()||null,
       visa_type:visaType,
       renewal_count:document.getElementById("mCount").value,
       method:document.getElementById("mMethod").value,
