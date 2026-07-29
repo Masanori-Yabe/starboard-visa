@@ -63,6 +63,24 @@
   #login button{width:100%;padding:11px}
   .err{color:var(--red);font-size:12px;margin-top:8px;min-height:16px}
   .hint{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px;font-size:12px;color:#92400e;margin-bottom:14px}
+  /* checklist */
+  .chk-sec{border-top:1px solid var(--line);margin-top:6px;padding-top:12px}
+  .chk-sec h3{font-size:14px;margin:0 0 4px;color:var(--blued)}
+  .chk-sec .note{font-size:11px;color:var(--sub);margin:0 0 10px}
+  .chk-grp{margin-bottom:10px}
+  .chk-grp .gh{font-size:12px;font-weight:700;color:var(--ink);margin:8px 0 4px}
+  .chk-row{display:flex;align-items:center;gap:8px;padding:3px 0}
+  .chk-row>input[type=checkbox]{width:16px;height:16px;flex:none;margin:0}
+  .chk-row .cl{flex:1;font-size:12.5px;line-height:1.35}
+  .chk-row>input[type=date]{width:132px;flex:none;padding:4px 6px;border:1px solid var(--line);border-radius:5px;font-size:12px}
+  .chk-row.cond .cl{color:var(--sub)}
+  .info{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--blued);color:#fff;font-size:10px;font-weight:700;margin-left:5px;cursor:help;position:relative;vertical-align:middle}
+  .info.cnd{background:var(--amb)}
+  .info:hover .bub{display:block}
+  .info .bub{display:none;position:absolute;bottom:135%;left:50%;transform:translateX(-50%);width:230px;background:#111827;color:#fff;font-size:11px;font-weight:400;line-height:1.45;padding:8px 10px;border-radius:8px;z-index:60;text-align:left;box-shadow:0 4px 12px rgba(0,0,0,.28)}
+  .info .bub::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:#111827}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 6px;border-radius:6px;background:var(--graybg);color:var(--sub);white-space:nowrap}
+  .badge.done{background:var(--grnbg);color:var(--grn)}
 </style>
 </head>
 <body>
@@ -111,7 +129,7 @@
           <th data-k="facility_name">施設・法人</th><th data-k="person_name">人材</th>
           <th data-k="renewal_count">回数</th><th data-k="method">対応方法</th>
           <th data-k="status">状況</th><th data-k="explained_on">説明日</th>
-          <th>備考</th><th></th>
+          <th>備考</th><th>書類</th><th></th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -125,6 +143,8 @@
   <div class="modal">
     <h2 id="mTitle">新規追加</h2>
     <input type="hidden" id="mId">
+    <div class="fg"><label>在留資格の種類 *</label>
+      <select id="mVisa" onchange="onVisaChange()"><option>特定技能</option><option>技術・人文知識・国際業務</option></select></div>
     <div class="row2">
       <div class="fg"><label>更新期日 *</label><input type="date" id="mDeadline"></div>
       <div class="fg"><label>顧客説明日</label><input type="date" id="mExpl"></div>
@@ -146,6 +166,7 @@
     </div>
     <div class="fg"><label>Rakuvisa ID</label><input id="mRak"></div>
     <div class="fg"><label>備考</label><textarea id="mMemo" rows="2"></textarea></div>
+    <div class="chk-sec" id="chkSec"></div>
     <div class="actions">
       <button class="btn-sm" id="mDel" style="background:var(--redbg);color:var(--red)" onclick="delItem()">削除</button>
       <div>
@@ -165,6 +186,83 @@ const SUPABASE_ANON_KEY = "sb_publishable__uz-Vm3FUPgAeKJC2UYQhA_jp4hwu48";
 // ====================================================================
 
 let sb, ROWS=[], FACS=[], sortKey="deadline", sortAsc=true;
+
+// ===== 提出書類チェックリスト テンプレート =====
+const KAZEI_INFO="「今、役所で取れる一番新しい年度のもの」を取得します。例：令和8年7月なら『令和8年度』（＝令和7年分の所得）を取得。※6月より前は前年度が最新の場合あり。";
+const CHECKLISTS = {
+  "特定技能": {
+    "人材": [
+      {k:"cost_notice", l:"費用の事前案内（印紙5,500円／レターパックライト青2部／証明書代）"},
+      {k:"photo", l:"証明写真（3ヶ月以内・スマホ可）"},
+      {k:"passport", l:"パスポート（顔写真ページ）"},
+      {k:"card", l:"在留カード（表裏）"},
+      {k:"gensen", l:"源泉徴収票（直近年度）"},
+      {k:"kazei", l:"課税証明書（最新年度）", info:KAZEI_INFO},
+      {k:"nozei", l:"納税証明書（最新年度）", info:KAZEI_INFO},
+      {k:"kyu_zei", l:"旧住所の課税・納税証明書", cond:"1月1日時点の住所が現住所と異なる場合のみ"},
+      {k:"email", l:"メールアドレス（連絡・署名用）"},
+      {k:"mendan", l:"本人確認面談の実施"},
+    ],
+    "所属機関": [
+      {k:"keiyaku", l:"特定技能雇用契約書（1-5号・社印）"},
+      {k:"joken", l:"雇用条件書（1-6号・社印）"},
+      {k:"chingin", l:"賃金・控除の最新状況"},
+      {k:"choshu", l:"徴収費用の説明書（1-9号）", cond:"寮費・水道光熱費等を徴収している場合"},
+      {k:"nofu", l:"社会保険料・労働保険料・税金の納付状況"},
+      {k:"kyoryoku", l:"協力確認書の提出有無／年月日"},
+      {k:"gaiyo", l:"特定技能所属機関概要書（2-1号）", cond:"前回から変更があった場合"},
+      {k:"toki", l:"登記事項証明書", cond:"前回から変更があった場合"},
+      {k:"kessan", l:"決算文書（貸借対照表・損益計算書）"},
+    ]
+  }
+  // 技術・人文知識・国際業務 は今後追加
+};
+const PARTY_LABEL={"人材":"🧑 人材（本人）から取り寄せ","所属機関":"🏢 所属機関（施設・企業）から取り寄せ・確認"};
+
+function todayLocal(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+
+function renderChecklist(visaType, data){
+  data=data||{};
+  const sec=document.getElementById("chkSec");
+  const tmpl=CHECKLISTS[visaType];
+  if(!tmpl){ sec.innerHTML=`<h3>提出書類チェック</h3><p class="note">この在留資格のチェックリストは今後追加予定です。</p>`; return; }
+  let html=`<h3>提出書類チェック</h3><p class="note">入手・確認できたらチェック → 入手日が自動で入ります（変更可）。</p>`;
+  for(const party of Object.keys(tmpl)){
+    html+=`<div class="chk-grp"><div class="gh">${PARTY_LABEL[party]}</div>`;
+    for(const it of tmpl[party]){
+      const cur=data[it.k]||{};
+      const info=it.info?`<span class="info">i<span class="bub">${esc(it.info)}</span></span>`:"";
+      const cond=it.cond?`<span class="info cnd">※<span class="bub">${esc(it.cond)}</span></span>`:"";
+      html+=`<div class="chk-row${it.cond?" cond":""}">
+        <input type="checkbox" id="ck_${it.k}" ${cur.c?"checked":""} onchange="onChk('${it.k}')">
+        <span class="cl">${esc(it.l)}${info}${cond}</span>
+        <input type="date" id="cd_${it.k}" value="${cur.d||""}">
+      </div>`;
+    }
+    html+=`</div>`;
+  }
+  sec.innerHTML=html;
+}
+function onChk(k){ const cb=document.getElementById("ck_"+k), dt=document.getElementById("cd_"+k);
+  if(cb.checked && !dt.value) dt.value=todayLocal(); }
+function onVisaChange(){ const sel=document.getElementById("mVisa");
+  const carried=collectChecklist(sel.dataset.prev||sel.value); sel.dataset.prev=sel.value;
+  renderChecklist(sel.value, carried); }
+function collectChecklist(visaType){
+  const tmpl=CHECKLISTS[visaType]; if(!tmpl) return {};
+  const out={};
+  for(const party of Object.keys(tmpl)) for(const it of tmpl[party]){
+    const cb=document.getElementById("ck_"+it.k), dt=document.getElementById("cd_"+it.k);
+    if(cb && (cb.checked || (dt&&dt.value))) out[it.k]={c:!!cb.checked, d:(dt&&dt.value)||null};
+  }
+  return out;
+}
+function chkProgress(r){
+  const tmpl=CHECKLISTS[r.visa_type]; if(!tmpl) return null;
+  const cl=r.checklist||{};
+  const cnt=arr=>arr.reduce((n,it)=>n+((cl[it.k]&&cl[it.k].c)?1:0),0);
+  return { j:[cnt(tmpl["人材"]),tmpl["人材"].length], s:[cnt(tmpl["所属機関"]),tmpl["所属機関"].length] };
+}
 
 function cfgReady(){ return !SUPABASE_URL.includes("REPLACE_ME") && !SUPABASE_ANON_KEY.includes("REPLACE_ME"); }
 
@@ -245,7 +343,7 @@ function render(){
     return (x<y?-1:x>y?1:0)*(sortAsc?1:-1);
   });
   document.getElementById("tbody").innerHTML=list.map(rowHtml).join("")||
-    `<tr><td colspan="10" style="text-align:center;color:var(--sub);padding:24px">該当なし</td></tr>`;
+    `<tr><td colspan="11" style="text-align:center;color:var(--sub);padding:24px">該当なし</td></tr>`;
   document.getElementById("count").textContent=`表示 ${list.length} 件 / 全 ${ROWS.length} 件`;
 }
 
@@ -254,6 +352,10 @@ function daysText(d){ if(d==null)return"—"; if(d<0)return`${Math.abs(d)}日超
 
 function rowHtml(r){
   const dc = ACTIVE(r)?daysClass(r.days_left):"d-far";
+  const pg=chkProgress(r);
+  let badge=`<span class="badge">—</span>`;
+  if(pg){ const done=pg.j[0]+pg.s[0], tot=pg.j[1]+pg.s[1];
+    badge=`<span class="badge ${done===tot?"done":""}">人${pg.j[0]}/${pg.j[1]} 所${pg.s[0]}/${pg.s[1]}</span>`; }
   return `<tr>
     <td>${r.deadline||""}</td>
     <td class="days ${dc}">${ACTIVE(r)?daysText(r.days_left):"—"}</td>
@@ -264,6 +366,7 @@ function rowHtml(r){
     <td><span class="pill s-${r.status}">${r.status}</span></td>
     <td>${r.explained_on||""}</td>
     <td class="memo">${esc(r.memo||"")}</td>
+    <td>${badge}</td>
     <td><button class="btn-sm btn-light" onclick='openForm(${JSON.stringify(r.id)})'>編集</button></td>
   </tr>`;
 }
@@ -283,6 +386,9 @@ function openForm(id){
   document.getElementById("mStatus").value=m?m.status:"未対応";
   document.getElementById("mRak").value=m?.rakuvisa_id||"";
   document.getElementById("mMemo").value=m?.memo||"";
+  const vt=m?.visa_type||"特定技能";
+  const mVisa=document.getElementById("mVisa"); mVisa.value=vt; mVisa.dataset.prev=vt;
+  renderChecklist(vt, m?.checklist||{});
   document.getElementById("mDel").style.display=m?"block":"none";
   document.getElementById("mErr").textContent="";
   document.getElementById("ov").classList.add("show");
@@ -306,14 +412,17 @@ async function saveItem(){
     const person=document.getElementById("mPerson").value.trim();
     if(!deadline||!facName||!person){ err.textContent="更新期日・施設・人材名は必須です。"; return; }
     const facility_id=await ensureFacility(facName);
+    const visaType=document.getElementById("mVisa").value;
     const rec={
       deadline, facility_id, person_name:person,
+      visa_type:visaType,
       renewal_count:document.getElementById("mCount").value,
       method:document.getElementById("mMethod").value,
       status:document.getElementById("mStatus").value,
       explained_on:document.getElementById("mExpl").value||null,
       rakuvisa_id:document.getElementById("mRak").value.trim()||null,
       memo:document.getElementById("mMemo").value.trim()||null,
+      checklist:collectChecklist(visaType),
     };
     const id=document.getElementById("mId").value;
     const res=id ? await sb.from("visa_renewals").update(rec).eq("id",id)
