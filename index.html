@@ -81,6 +81,14 @@
   .chk-row .cl{flex:1;font-size:12.5px;line-height:1.35}
   .chk-row>input[type=date]{width:132px;flex:none;padding:4px 6px;border:1px solid var(--line);border-radius:5px;font-size:12px}
   .chk-row.cond .cl{color:var(--sub)}
+  /* 書類ファイル添付 */
+  .chk-file{flex:none;width:150px;display:flex;align-items:center;gap:4px;font-size:11px}
+  .chk-file .cf-up{background:var(--graybg);color:var(--ink);border:1px dashed var(--line);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:11px;white-space:nowrap}
+  .chk-file .cf-up:hover{background:#eef2f7}
+  .chk-file .cf-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blued);text-decoration:none}
+  .chk-file .cf-name:hover{text-decoration:underline}
+  .chk-file .cf-del{flex:none;border:none;background:none;color:var(--sub);cursor:pointer;font-size:13px;padding:0 2px;line-height:1}
+  .chk-file .cf-del:hover{color:#dc2626}
   .info{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--blued);color:#fff;font-size:10px;font-weight:700;margin-left:5px;cursor:help;position:relative;vertical-align:middle}
   .info.cnd{background:var(--amb)}
   .info:hover .bub{display:block}
@@ -245,6 +253,7 @@ const SUPABASE_ANON_KEY = "sb_publishable__uz-Vm3FUPgAeKJC2UYQhA_jp4hwu48";
 // ====================================================================
 
 let sb, ROWS=[], FACS=[], sortKey="deadline", sortAsc=true;
+let CHK_FILES={};  // 提出書類の添付ファイル {checklistキー: {f:保存パス, n:ファイル名}}
 
 // ===== 提出書類チェックリスト テンプレート =====
 const KAZEI_INFO="「今、役所で取れる一番新しい年度のもの」を取得します。例：令和8年7月なら『令和8年度』（＝令和7年分の所得）を取得。※6月より前は前年度が最新の場合あり。";
@@ -356,20 +365,24 @@ function todayLocal(){ const d=new Date(); return `${d.getFullYear()}-${String(d
 
 function renderChecklist(visaType, data){
   data=data||{};
+  CHK_FILES={};
   const sec=document.getElementById("chkSec");
   const tmpl=CHECKLISTS[visaType];
   if(!tmpl){ sec.innerHTML=`<h3>提出書類チェック</h3><p class="note">この在留資格のチェックリストは今後追加予定です。</p>`; return; }
-  let html=`<h3>提出書類チェック</h3><p class="note">入手・確認できたらチェック → 入手日が自動で入ります（変更可）。</p>`;
+  let html=`<h3>提出書類チェック</h3><p class="note">書類ファイルを「アップロード」すると、チェックと入手日が自動で入ります。手動でのチェックも可能です。</p>`;
   for(const party of Object.keys(tmpl)){
     html+=`<div class="chk-grp"><div class="gh">${PARTY_LABEL[party]}</div>`;
     for(const it of tmpl[party]){
       const cur=data[it.k]||{};
+      if(cur.f) CHK_FILES[it.k]={f:cur.f, n:cur.n||"ファイル"};
       const info=it.info?`<span class="info">i<span class="bub">${esc(it.info)}</span></span>`:"";
       const cond=it.cond?`<span class="info cnd">※<span class="bub">${esc(it.cond)}</span></span>`:"";
       html+=`<div class="chk-row${it.cond?" cond":""}">
         <input type="checkbox" id="ck_${it.k}" ${cur.c?"checked":""} onchange="onChk('${it.k}')">
         <span class="cl">${esc(it.l)}${info}${cond}</span>
         <input type="date" id="cd_${it.k}" value="${cur.d||""}">
+        <input type="file" id="df_${it.k}" accept="image/*,application/pdf" style="display:none" onchange="uploadDoc('${it.k}')">
+        <span class="chk-file" id="cf_${it.k}"></span>
       </div>`;
     }
     html+=`</div>`;
@@ -383,6 +396,60 @@ function renderChecklist(visaType, data){
     <div id="copyMsg" class="msg-ok"></div>
   </div>`;
   sec.innerHTML=html;
+  for(const party of Object.keys(tmpl)) for(const it of tmpl[party]) renderChkFile(it.k);
+}
+function renderChkFile(k){
+  const box=document.getElementById("cf_"+k); if(!box) return;
+  const f=CHK_FILES[k];
+  if(f){
+    box.innerHTML=`<a class="cf-name" id="cflink_${k}" href="#" onclick="openDoc(event,'${k}')" title="${esc(f.n)}">📎 ${esc(f.n)}</a>
+      <button type="button" class="cf-del" title="削除" onclick="deleteDoc('${k}')">✕</button>`;
+  } else {
+    box.innerHTML=`<span class="cf-up" onclick="document.getElementById('df_${k}').click()">⬆ アップロード</span>`;
+  }
+}
+async function openDoc(e,k){
+  e.preventDefault();
+  const f=CHK_FILES[k]; if(!f) return;
+  const {data}=await sb.storage.from("visa-documents").createSignedUrl(f.f,3600);
+  if(data&&data.signedUrl) window.open(data.signedUrl,"_blank","noopener");
+}
+async function uploadDoc(k){
+  const id=document.getElementById("mId").value;
+  if(!id){ alert("先に「保存」してからアップロードしてください。"); document.getElementById("df_"+k).value=""; return; }
+  const file=document.getElementById("df_"+k).files[0]; if(!file) return;
+  const box=document.getElementById("cf_"+k); if(box) box.innerHTML='<span class="note" style="font-size:11px">アップロード中...</span>';
+  const path=`${id}/${k}`;
+  const {error}=await sb.storage.from("visa-documents").upload(path,file,{upsert:true,contentType:file.type});
+  if(error){ alert("アップロード失敗: "+error.message); renderChkFile(k); return; }
+  CHK_FILES[k]={f:path, n:file.name};
+  // アップロードで自動チェック＋入手日（空なら今日）
+  const cb=document.getElementById("ck_"+k), dt=document.getElementById("cd_"+k);
+  if(cb) cb.checked=true;
+  if(dt && !dt.value) dt.value=todayLocal();
+  renderChkFile(k);
+  await persistChkItem(k);
+}
+async function deleteDoc(k){
+  const id=document.getElementById("mId").value; if(!id) return;
+  if(!confirm("この書類ファイルを削除しますか？（チェックは残ります）")) return;
+  await sb.storage.from("visa-documents").remove([`${id}/${k}`]);
+  delete CHK_FILES[k];
+  renderChkFile(k);
+  await persistChkItem(k);
+}
+// 1項目分のチェック状態を、DB上の checklist にマージして即保存（カード画像と同じ挙動）
+async function persistChkItem(k){
+  const id=document.getElementById("mId").value; if(!id) return;
+  const row=ROWS.find(x=>x.id===id);
+  const cl=Object.assign({}, (row&&row.checklist)||{});
+  const cb=document.getElementById("ck_"+k), dt=document.getElementById("cd_"+k);
+  const item={c:!!(cb&&cb.checked), d:(dt&&dt.value)||null};
+  if(CHK_FILES[k]){ item.f=CHK_FILES[k].f; item.n=CHK_FILES[k].n; }
+  cl[k]=item;
+  const {error}=await sb.from("visa_renewals").update({checklist:cl}).eq("id",id);
+  if(error){ alert("保存失敗: "+error.message); return; }
+  if(row) row.checklist=cl;
 }
 function onChk(k){ const cb=document.getElementById("ck_"+k), dt=document.getElementById("cd_"+k);
   if(cb.checked && !dt.value) dt.value=todayLocal(); }
@@ -394,7 +461,11 @@ function collectChecklist(visaType){
   const out={};
   for(const party of Object.keys(tmpl)) for(const it of tmpl[party]){
     const cb=document.getElementById("ck_"+it.k), dt=document.getElementById("cd_"+it.k);
-    if(cb && (cb.checked || (dt&&dt.value))) out[it.k]={c:!!cb.checked, d:(dt&&dt.value)||null};
+    const hasFile=!!CHK_FILES[it.k];
+    if(cb && (cb.checked || (dt&&dt.value) || hasFile)){
+      out[it.k]={c:!!cb.checked, d:(dt&&dt.value)||null};
+      if(hasFile){ out[it.k].f=CHK_FILES[it.k].f; out[it.k].n=CHK_FILES[it.k].n; }
+    }
   }
   return out;
 }
