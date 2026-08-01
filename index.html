@@ -889,6 +889,7 @@ async function exportToDrive(){
 
 // 西山先生へのメール（件名・本文を生成）
 const NISHIYAMA_EMAIL="kenjin0301@gmail.com";
+const MAIL_CC="indonesia@star-board.net";
 const STARBOARD_SIGN=[
   "_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/",
   "株式会社StarBoard (スターボード)","",
@@ -907,7 +908,8 @@ function buildNishiyamaMail(){
   const body=[
     "にしやま行政書士事務所","行政書士　西山健二様","",
     "いつもお世話になっております。株式会社StarBoardです。",
-    `${person}様${fac?`（${fac}）`:""}の在留資格更新につきまして、提出書類を下記のGoogleドライブに格納いたしました。ご確認のほど、よろしくお願いいたします。`,"",
+    `${person}様${fac?`（${fac}）`:""}の在留資格更新につきまして、提出書類を下記のGoogleドライブに格納いたしました。`,
+    "ご確認のほど、よろしくお願いいたします。","",
     "▼ 提出書類フォルダ（Googleドライブ）",
     url,"",
     "お忙しいところ恐れ入りますが、何卒よろしくお願いいたします。","",
@@ -920,13 +922,14 @@ function nishiyamaMail(){
   const m=buildNishiyamaMail();
   const gmail="https://mail.google.com/mail/?view=cm&fs=1"
     +"&to="+encodeURIComponent(NISHIYAMA_EMAIL)
+    +"&cc="+encodeURIComponent(MAIL_CC)
     +"&su="+encodeURIComponent(m.subject)
     +"&body="+encodeURIComponent(m.body);
   window.open(gmail,"_blank","noopener");
 }
 async function copyNishiyamaMail(){
   const m=buildNishiyamaMail();
-  const text="宛先: "+NISHIYAMA_EMAIL+"\n件名: "+m.subject+"\n\n"+m.body;
+  const text="宛先: "+NISHIYAMA_EMAIL+"\nCC: "+MAIL_CC+"\n件名: "+m.subject+"\n\n"+m.body;
   try{ await navigator.clipboard.writeText(text); }
   catch(e){ const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
     document.body.appendChild(ta); ta.select(); try{document.execCommand("copy");}catch(_){}; ta.remove(); }
