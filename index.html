@@ -104,6 +104,18 @@
   .chk-row.dz>*{pointer-events:none}
   .chk-row.dz .dz-hint{display:inline-flex;align-items:center;position:absolute;right:10px;color:var(--blued);font-weight:700;font-size:11px;background:#eff6ff;padding:0 4px}
   .chk-row{position:relative}
+  /* 進捗バー（緑1色＋数字1つ） */
+  .pbar-wrap{display:flex;align-items:center;gap:6px}
+  .pbar{background:var(--graybg);border-radius:999px;overflow:hidden}
+  .pbar-fill{height:100%;background:#16a34a;border-radius:999px;transition:width .3s ease}
+  .pbar-sm{width:56px;height:7px;flex:none}
+  .pbar-num{font-size:11px;font-weight:700;color:var(--ink);white-space:nowrap}
+  .pbar-num.full{color:var(--grn)}
+  .pbar-warn{font-size:10px;font-weight:700;color:#b45309;background:#fef3c7;border-radius:4px;padding:1px 5px;white-space:nowrap}
+  .pbar-lgw{margin:8px 0 12px;padding:9px 12px;background:#f8fafc;border:1px solid var(--line);border-radius:8px}
+  .pbar-lbl{font-size:11px;font-weight:700;color:var(--sub);white-space:nowrap}
+  .pbar-lg{flex:1;height:10px}
+  .pbar-lgw .pbar-num{font-size:13px}
   .info{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--blued);color:#fff;font-size:10px;font-weight:700;margin-left:5px;cursor:help;position:relative;vertical-align:middle}
   .info.cnd{background:var(--amb)}
   .info:hover .bub{display:block}
@@ -385,7 +397,7 @@ function renderChecklist(visaType, data){
   const sec=document.getElementById("chkSec");
   const tmpl=CHECKLISTS[visaType];
   if(!tmpl){ sec.innerHTML=`<h3>提出書類チェック</h3><p class="note">この在留資格のチェックリストは今後追加予定です。</p>`; return; }
-  let html=`<h3>提出書類チェック</h3><p class="note">①ファイルを「アップロード」<b>または各行にドラッグ&ドロップ</b>＝<b>添付済（未確認）</b>。②中身を開いて内容を確認したら<b>チェック</b>を入れて<b>確認済</b>に。※アップロードだけでは確認済みになりません。</p>`;
+  let html=`<h3>提出書類チェック</h3><p class="note">①ファイルを「アップロード」<b>または各行にドラッグ&ドロップ</b>＝<b>添付済（未確認）</b>。②中身を開いて内容を確認したら<b>チェック</b>を入れて<b>確認済</b>に。※アップロードだけでは確認済みになりません。</p><div id="chkProg"></div>`;
   for(const party of Object.keys(tmpl)){
     html+=`<div class="chk-grp"><div class="gh">${PARTY_LABEL[party]}</div>`;
     for(const it of tmpl[party]){
@@ -415,6 +427,7 @@ function renderChecklist(visaType, data){
   </div>`;
   sec.innerHTML=html;
   for(const party of Object.keys(tmpl)) for(const it of tmpl[party]) renderChkFile(it.k);
+  renderChkProgress();
 }
 function renderChkFile(k){
   const box=document.getElementById("cf_"+k); if(!box) return;
@@ -466,6 +479,7 @@ async function uploadFiles(k, files){
   const dt=document.getElementById("cd_"+k);
   if(CHK_FILES[k].length && dt && !dt.value) dt.value=todayLocal();
   renderChkFile(k);
+  renderChkProgress();
   await persistChkItem(k);
 }
 // ドラッグ&ドロップ
@@ -485,6 +499,7 @@ async function deleteDoc(k,i){
   arr.splice(i,1);
   if(!arr.length) delete CHK_FILES[k];
   renderChkFile(k);
+  renderChkProgress();
   await persistChkItem(k);
 }
 // 1項目分のチェック状態を、DB上の checklist にマージして即保存（カード画像と同じ挙動）
@@ -503,6 +518,7 @@ async function persistChkItem(k){
 async function onChk(k){ const cb=document.getElementById("ck_"+k), dt=document.getElementById("cd_"+k);
   if(cb.checked && !dt.value) dt.value=todayLocal();
   renderChkFile(k);              // 確認済/未確認バッジを即更新
+  renderChkProgress();           // 進捗バーを即更新
   await persistChkItem(k); }     // 確認操作をその場で保存（保存ボタン待ちで消えない）
 function onVisaChange(){ const sel=document.getElementById("mVisa");
   const carried=collectChecklist(sel.dataset.prev||sel.value); sel.dataset.prev=sel.value;
@@ -577,14 +593,53 @@ async function deleteCard(side){
   cardSideHtml(side, side==="front"?"表面":"裏面", null);
 }
 
+// 進捗集計（分母は自動：必須項目＋着手した条件付き項目のみ / 分子＝確認済）
+function progressOf(cl, tmpl){
+  let done=0, total=0, unv=0;
+  for(const party of Object.keys(tmpl)) for(const it of tmpl[party]){
+    const x=cl[it.k]||{};
+    const hasFile=!!(x.files&&x.files.length);
+    const active=!it.cond || x.c || hasFile;   // 必須、または条件付きでも着手済みなら分母に入れる
+    if(active){ total++; if(x.c) done++; }
+    if(!x.c && hasFile) unv++;                  // 添付済だが未確認
+  }
+  return {done, total, unv};
+}
 function chkProgress(r){
   const tmpl=CHECKLISTS[r.visa_type]; if(!tmpl) return null;
-  const cl=r.checklist||{};
-  const cnt=arr=>arr.reduce((n,it)=>n+((cl[it.k]&&cl[it.k].c)?1:0),0);
-  // 添付済だが未確認（ファイルあり＆未チェック）の件数
-  const unv=arr=>arr.reduce((n,it)=>{const x=cl[it.k]; return n+((x&&!x.c&&x.files&&x.files.length)?1:0);},0);
-  return { j:[cnt(tmpl["人材"]),tmpl["人材"].length], s:[cnt(tmpl["所属機関"]),tmpl["所属機関"].length],
-           u:unv(tmpl["人材"])+unv(tmpl["所属機関"]) };
+  return progressOf(r.checklist||{}, tmpl);
+}
+// 進捗バーHTML（緑1色＋数字1つ）。size="sm"=一覧用ミニ / "lg"=編集画面用
+function progressBar(pg, size){
+  if(!pg) return "";
+  const pct = pg.total ? Math.round(pg.done/pg.total*100) : 0;
+  const full = pg.total>0 && pg.done===pg.total;
+  const num = full ? (size==="lg"?"完了 ✓":"完了") : `${pg.done}/${pg.total}`;
+  const warn = pg.unv ? `<span class="pbar-warn" title="添付済だが内容未確認">⚠${size==="lg"?" 未確認 ":""}${pg.unv}</span>` : "";
+  return `<div class="pbar-wrap ${size==="lg"?"pbar-lgw":""}">`
+    + (size==="lg"?`<span class="pbar-lbl">提出状況</span>`:"")
+    + `<div class="pbar ${size==="lg"?"pbar-lg":"pbar-sm"}"><div class="pbar-fill" style="width:${pct}%"></div></div>`
+    + `<span class="pbar-num${full?" full":""}">${num}</span>${warn}</div>`;
+}
+// 編集画面の集計は現在のDOM状態（チェック＋CHK_FILES）から算出し、その場で更新
+function computeProgressFromDOM(vt){
+  const tmpl=CHECKLISTS[vt]; if(!tmpl) return null;
+  let done=0,total=0,unv=0;
+  for(const party of Object.keys(tmpl)) for(const it of tmpl[party]){
+    const cb=document.getElementById("ck_"+it.k);
+    const checked=!!(cb&&cb.checked);
+    const hasFile=!!(CHK_FILES[it.k]&&CHK_FILES[it.k].length);
+    const active=!it.cond || checked || hasFile;
+    if(active){ total++; if(checked) done++; }
+    if(!checked && hasFile) unv++;
+  }
+  return {done,total,unv};
+}
+function renderChkProgress(){
+  const el=document.getElementById("chkProg"); if(!el) return;
+  const vt=document.getElementById("mVisa").value;
+  if(!CHECKLISTS[vt]){ el.innerHTML=""; return; }
+  el.innerHTML=progressBar(computeProgressFromDOM(vt),"lg");
 }
 
 function cfgReady(){ return !SUPABASE_URL.includes("REPLACE_ME") && !SUPABASE_ANON_KEY.includes("REPLACE_ME"); }
@@ -689,10 +744,7 @@ function daysText(d){ if(d==null)return"—"; if(d<0)return`${Math.abs(d)}日超
 function rowHtml(r){
   const dc = SHOWDAYS(r)?daysClass(r.days_left):"d-far";
   const pg=chkProgress(r);
-  let badge=`<span class="badge">—</span>`;
-  if(pg){ const done=pg.j[0]+pg.s[0], tot=pg.j[1]+pg.s[1];
-    const warn=pg.u?`<span class="badge warn" title="添付済だが内容未確認">未確認${pg.u}</span>`:"";
-    badge=`<span class="badge ${done===tot?"done":""}">人${pg.j[0]}/${pg.j[1]} 所${pg.s[0]}/${pg.s[1]}</span>`+warn; }
+  const badge = pg ? progressBar(pg,"sm") : `<span class="badge">—</span>`;
   return `<tr>
     <td>${r.deadline||""}</td>
     <td class="days ${dc}">${SHOWDAYS(r)?daysText(r.days_left):"—"}</td>
