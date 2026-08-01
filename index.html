@@ -94,6 +94,10 @@
   .chk-file .cf-del:hover{color:#dc2626}
   .chk-file .cf-add{color:var(--blued);cursor:pointer;font-size:11px;margin-top:1px}
   .chk-file .cf-add:hover{text-decoration:underline}
+  .chk-file .cf-badge{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-top:2px}
+  .chk-file .cf-ok{background:var(--grnbg);color:var(--grn)}
+  .chk-file .cf-warn{background:#fef3c7;color:#b45309}
+  .badge.warn{background:#fef3c7;color:#b45309;margin-left:4px}
   .info{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--blued);color:#fff;font-size:10px;font-weight:700;margin-left:5px;cursor:help;position:relative;vertical-align:middle}
   .info.cnd{background:var(--amb)}
   .info:hover .bub{display:block}
@@ -320,8 +324,9 @@ const WORKER_ITEMS={
   email:{jp:"連絡用のメールアドレス", id:"Alamat email untuk komunikasi"},
 };
 
+const HAS=x=>!!(x && (x.c || (x.files&&x.files.length)));   // 確認済 または 添付済(受領済)
 function buildWorkerMsg(name, cl){
-  const need=WORKER_ORDER.filter(k=>!(cl[k]&&cl[k].c));
+  const need=WORKER_ORDER.filter(k=>!HAS(cl[k]));
   let jp,id;
   if(need.length){
     jp=[`${name}さん、こんにちは。StarBoardです。`, MSG_JP.intro, "", MSG_JP.head,
@@ -336,7 +341,7 @@ function buildWorkerMsg(name, cl){
 }
 function buildOrgMsg(facility, name, cl){
   const tmpl=CHECKLISTS["特定技能"]["所属機関"];
-  const need=tmpl.filter(it=>!(cl[it.k]&&cl[it.k].c));
+  const need=tmpl.filter(it=>!HAS(cl[it.k]));
   const body = need.length
     ? ["【ご確認・ご準備いただく事項】", ...need.map(it=>"・"+it.l+(it.cond?`（${it.cond}）`:""))].join("\n")
     : "現在お願いしている確認事項はございません。ご協力ありがとうございます。";
@@ -374,7 +379,7 @@ function renderChecklist(visaType, data){
   const sec=document.getElementById("chkSec");
   const tmpl=CHECKLISTS[visaType];
   if(!tmpl){ sec.innerHTML=`<h3>提出書類チェック</h3><p class="note">この在留資格のチェックリストは今後追加予定です。</p>`; return; }
-  let html=`<h3>提出書類チェック</h3><p class="note">書類ファイルを「アップロード」すると、チェックと入手日が自動で入ります。手動でのチェックも可能です。</p>`;
+  let html=`<h3>提出書類チェック</h3><p class="note">①ファイルを「アップロード」＝<b>添付済（未確認）</b>。②中身を開いて内容を確認したら<b>チェック</b>を入れて<b>確認済</b>に。※アップロードだけでは確認済みになりません。</p>`;
   for(const party of Object.keys(tmpl)){
     html+=`<div class="chk-grp"><div class="gh">${PARTY_LABEL[party]}</div>`;
     for(const it of tmpl[party]){
@@ -394,7 +399,7 @@ function renderChecklist(visaType, data){
     html+=`</div>`;
   }
   html+=`<div class="msg-box">
-    <div class="msg-ttl">依頼メッセージ（未チェックの項目を自動で一覧化）</div>
+    <div class="msg-ttl">依頼メッセージ（まだ届いていない書類を自動で一覧化）</div>
     <div class="msg-btns">
       <button type="button" class="btn-sm msg-w" onclick="copyMsg('worker')">📋 人材向けをコピー（日本語＋インドネシア語）</button>
       <button type="button" class="btn-sm msg-o" onclick="copyMsg('org')">📋 所属機関向けをコピー</button>
@@ -407,17 +412,22 @@ function renderChecklist(visaType, data){
 function renderChkFile(k){
   const box=document.getElementById("cf_"+k); if(!box) return;
   const arr=CHK_FILES[k]||[];
+  const cb=document.getElementById("ck_"+k);
+  const checked=!!(cb&&cb.checked);
+  let h="";
   if(arr.length){
-    let h="";
     arr.forEach((f,i)=>{
       h+=`<span class="cf-item"><a class="cf-name" href="#" onclick="openDoc(event,'${k}',${i})" title="${esc(f.n)}">📎 ${esc(f.n)}</a>`
         +`<button type="button" class="cf-del" title="削除" onclick="deleteDoc('${k}',${i})">✕</button></span>`;
     });
     h+=`<span class="cf-add" title="ファイルを追加" onclick="document.getElementById('df_${k}').click()">＋ 追加</span>`;
-    box.innerHTML=h;
   } else {
-    box.innerHTML=`<span class="cf-up" onclick="document.getElementById('df_${k}').click()">⬆ アップロード</span>`;
+    h+=`<span class="cf-up" onclick="document.getElementById('df_${k}').click()">⬆ アップロード</span>`;
   }
+  // 状態バッジ: 確認済（チェック済）/ 未確認（ファイルはあるが未チェック）
+  if(checked) h+=`<span class="cf-badge cf-ok">✓ 確認済</span>`;
+  else if(arr.length) h+=`<span class="cf-badge cf-warn">⚠ 未確認</span>`;
+  box.innerHTML=h;
 }
 async function openDoc(e,k,i){
   e.preventDefault();
@@ -440,9 +450,9 @@ async function uploadDoc(k){
     CHK_FILES[k].push({f:path, n:file.name});
   }
   input.value="";
-  // ファイルが1つでも付いたら自動チェック＋入手日（空なら今日）
-  const cb=document.getElementById("ck_"+k), dt=document.getElementById("cd_"+k);
-  if(CHK_FILES[k].length){ if(cb) cb.checked=true; if(dt && !dt.value) dt.value=todayLocal(); }
+  // アップロード＝「添付済（未確認）」。入手日だけ自動記入（空なら今日）。※チェック(=確認済)は人が付ける
+  const dt=document.getElementById("cd_"+k);
+  if(CHK_FILES[k].length && dt && !dt.value) dt.value=todayLocal();
   renderChkFile(k);
   await persistChkItem(k);
 }
@@ -469,8 +479,10 @@ async function persistChkItem(k){
   if(error){ alert("保存失敗: "+error.message); return; }
   if(row) row.checklist=cl;
 }
-function onChk(k){ const cb=document.getElementById("ck_"+k), dt=document.getElementById("cd_"+k);
-  if(cb.checked && !dt.value) dt.value=todayLocal(); }
+async function onChk(k){ const cb=document.getElementById("ck_"+k), dt=document.getElementById("cd_"+k);
+  if(cb.checked && !dt.value) dt.value=todayLocal();
+  renderChkFile(k);              // 確認済/未確認バッジを即更新
+  await persistChkItem(k); }     // 確認操作をその場で保存（保存ボタン待ちで消えない）
 function onVisaChange(){ const sel=document.getElementById("mVisa");
   const carried=collectChecklist(sel.dataset.prev||sel.value); sel.dataset.prev=sel.value;
   renderChecklist(sel.value, carried); }
@@ -548,7 +560,10 @@ function chkProgress(r){
   const tmpl=CHECKLISTS[r.visa_type]; if(!tmpl) return null;
   const cl=r.checklist||{};
   const cnt=arr=>arr.reduce((n,it)=>n+((cl[it.k]&&cl[it.k].c)?1:0),0);
-  return { j:[cnt(tmpl["人材"]),tmpl["人材"].length], s:[cnt(tmpl["所属機関"]),tmpl["所属機関"].length] };
+  // 添付済だが未確認（ファイルあり＆未チェック）の件数
+  const unv=arr=>arr.reduce((n,it)=>{const x=cl[it.k]; return n+((x&&!x.c&&x.files&&x.files.length)?1:0);},0);
+  return { j:[cnt(tmpl["人材"]),tmpl["人材"].length], s:[cnt(tmpl["所属機関"]),tmpl["所属機関"].length],
+           u:unv(tmpl["人材"])+unv(tmpl["所属機関"]) };
 }
 
 function cfgReady(){ return !SUPABASE_URL.includes("REPLACE_ME") && !SUPABASE_ANON_KEY.includes("REPLACE_ME"); }
@@ -653,7 +668,8 @@ function rowHtml(r){
   const pg=chkProgress(r);
   let badge=`<span class="badge">—</span>`;
   if(pg){ const done=pg.j[0]+pg.s[0], tot=pg.j[1]+pg.s[1];
-    badge=`<span class="badge ${done===tot?"done":""}">人${pg.j[0]}/${pg.j[1]} 所${pg.s[0]}/${pg.s[1]}</span>`; }
+    const warn=pg.u?`<span class="badge warn" title="添付済だが内容未確認">未確認${pg.u}</span>`:"";
+    badge=`<span class="badge ${done===tot?"done":""}">人${pg.j[0]}/${pg.j[1]} 所${pg.s[0]}/${pg.s[1]}</span>`+warn; }
   return `<tr>
     <td>${r.deadline||""}</td>
     <td class="days ${dc}">${SHOWDAYS(r)?daysText(r.days_left):"—"}</td>
