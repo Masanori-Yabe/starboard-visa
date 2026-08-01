@@ -205,8 +205,12 @@
       <div class="fg"><label>顧客説明日</label><input type="date" id="mExpl"></div>
     </div>
     <div class="fg"><label>施設・法人名 *</label>
-      <select id="mFac"></select>
+      <select id="mFac" onchange="updateFacUnitList()"></select>
       <input id="mFacNew" placeholder="＋新しい施設名（ここに入力すると新規登録）" style="margin-top:6px">
+    </div>
+    <div class="fg"><label>施設・事業所名 <span style="font-weight:400;color:var(--sub);font-size:11px">（1法人に複数施設がある場合のみ／空欄なら略称を使用）</span></label>
+      <input id="mFacUnit" list="facUnitList" placeholder="例）外食／デイサービスセンター（品川屋のように複数拠点がある場合）">
+      <datalist id="facUnitList"></datalist>
     </div>
     <div class="row2">
       <div class="fg"><label>人材 正式名称 *</label><input id="mPerson" placeholder="例）Muhammad Arifin"></div>
@@ -646,6 +650,13 @@ function withSub(main, sub){
 function personDisp(r){ return withSub(r.person_name, r.nickname); }
 function facilityDisp(r){ return withSub(r.facility_name, r.facility_short); }
 function facLabel(f){ return withSub(f.name, f.short_name); }
+// 選択中の法人で過去に使われた「施設・事業所名」をサジェスト（入力ゆれ防止）
+function updateFacUnitList(){
+  const dl=document.getElementById("facUnitList"); if(!dl) return;
+  const fac=document.getElementById("mFac").value;
+  const units=[...new Set(ROWS.filter(r=>!fac||r.facility_name===fac).map(r=>r.facility_unit).filter(Boolean))].sort();
+  dl.innerHTML=units.map(u=>`<option value="${esc(u)}"></option>`).join("");
+}
 
 function setSort(k){ if(sortKey===k)sortAsc=!sortAsc; else{sortKey=k;sortAsc=true;} render(); }
 
@@ -685,7 +696,7 @@ function rowHtml(r){
   return `<tr>
     <td>${r.deadline||""}</td>
     <td class="days ${dc}">${SHOWDAYS(r)?daysText(r.days_left):"—"}</td>
-    <td>${esc(facilityDisp(r))}</td>
+    <td>${esc(facilityDisp(r))}${r.facility_unit?`<div style="font-size:11px;color:var(--sub)">↳ ${esc(r.facility_unit)}</div>`:''}</td>
     <td>${esc(personDisp(r))}${hasCardImg(r)?' <span title="在留カード画像あり">🪪</span>':''}</td>
     <td>${esc(r.renewal_count||"")}</td>
     <td class="m-${r.method}">${esc(r.method)}</td>
@@ -706,6 +717,8 @@ function openForm(id){
   document.getElementById("mExpl").value=m?.explained_on||"";
   document.getElementById("mFac").value=m?m.facility_name:"";
   document.getElementById("mFacNew").value="";
+  updateFacUnitList();
+  document.getElementById("mFacUnit").value=m?.facility_unit||"";
   document.getElementById("mPerson").value=m?m.person_name:"";
   document.getElementById("mNick").value=m?.nickname||"";
   document.getElementById("mCount").value=m?.renewal_count||"初";
@@ -783,6 +796,7 @@ async function saveItem(){
     const rec={
       deadline, facility_id, person_name:person,
       nickname:document.getElementById("mNick").value.trim()||null,
+      facility_unit:document.getElementById("mFacUnit").value.trim()||null,
       visa_type:visaType,
       renewal_count:document.getElementById("mCount").value,
       method:document.getElementById("mMethod").value,
@@ -803,6 +817,7 @@ async function saveItem(){
     if(createNext){
       const nextRec={ deadline:nextExp, facility_id, person_name:person,
         nickname:document.getElementById("mNick").value.trim()||null,
+        facility_unit:document.getElementById("mFacUnit").value.trim()||null,
         visa_type:visaType, renewal_count:nextCount(document.getElementById("mCount").value),
         method:document.getElementById("mMethod").value, status:"次回待ち", checklist:{} };
       const r2=await sb.from("visa_renewals").insert(nextRec);
