@@ -98,6 +98,11 @@
   .chk-file .cf-ok{background:var(--grnbg);color:var(--grn)}
   .chk-file .cf-warn{background:#fef3c7;color:#b45309}
   .badge.warn{background:#fef3c7;color:#b45309;margin-left:4px}
+  /* 西山先生メール */
+  .mail-box{margin-top:10px;padding:10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px}
+  .mail-h{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:4px}
+  .mail-sub{font-size:11px;color:var(--sub);margin-bottom:8px;word-break:break-all}
+  .mail-btns{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   /* ドラッグ&ドロップ */
   .chk-row .dz-hint{display:none}
   .chk-row.dz{background:#eff6ff;outline:2px dashed var(--blued);outline-offset:-2px;border-radius:6px}
@@ -282,6 +287,7 @@ const GAS_EXPORT_URL    = "https://script.google.com/macros/s/AKfycbzSg6G0Ug7XmN
 
 let sb, ROWS=[], FACS=[], sortKey="deadline", sortAsc=true;
 let CHK_FILES={};  // 提出書類の添付ファイル {checklistキー: {f:保存パス, n:ファイル名}}
+let LAST_EXPORT=null;  // 直近のDrive出力結果 {url, id}
 
 // ===== 提出書類チェックリスト テンプレート =====
 const KAZEI_INFO="「今、役所で取れる一番新しい年度のもの」を取得します。例：令和8年7月なら『令和8年度』（＝令和7年分の所得）を取得。※6月より前は前年度が最新の場合あり。";
@@ -861,14 +867,70 @@ async function exportToDrive(){
     const res=await fetch(GAS_EXPORT_URL, { method:"POST", body:JSON.stringify({ token, caseId:id }) });
     const out=await res.json();
     if(out.ok){
+      LAST_EXPORT={ url:out.url, id };
+      const mail=buildNishiyamaMail();
       msg.style.color="var(--grn)";
-      msg.innerHTML=`✓ 出力しました（${out.count}件）　<a href="${esc(out.url)}" target="_blank" rel="noopener" style="font-weight:700">📁 フォルダを開く</a>`;
+      msg.innerHTML=`✓ 出力しました（${out.count}件）　<a href="${esc(out.url)}" target="_blank" rel="noopener" style="font-weight:700">📁 フォルダを開く</a>`
+        +`<div class="mail-box">`
+        +`<div class="mail-h">✉️ 西山先生へメールで共有</div>`
+        +`<div class="mail-sub">件名：${esc(mail.subject)}</div>`
+        +`<div class="mail-btns">`
+        +`<button type="button" class="btn-sm" style="background:#16a34a;color:#fff" onclick="nishiyamaMail()">✉️ メールを作成（送信画面を開く）</button>`
+        +`<button type="button" class="btn-sm" style="background:#eef2f7" onclick="copyNishiyamaMail()">📋 件名・本文をコピー</button>`
+        +`<span id="mailCopyOk" style="font-size:11px;color:var(--grn)"></span>`
+        +`</div></div>`;
     }else{
       msg.style.color="#b91c1c"; msg.textContent="出力できませんでした: "+(out.error||"不明なエラー");
     }
   }catch(e){
     msg.style.color="#b91c1c"; msg.textContent="通信エラー: "+(e.message||e);
   }finally{ btn.disabled=false; btn.textContent=orig; }
+}
+
+// 西山先生へのメール（件名・本文を生成）
+const NISHIYAMA_EMAIL="kenjin0301@gmail.com";
+const STARBOARD_SIGN=[
+  "_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/",
+  "株式会社StarBoard (スターボード)","",
+  "　Tel : 052-982-6622　　",
+  "　Email : indonesia@star-board.net",
+  "　URL : https://star-board.net",
+  "_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/"
+].join("\n");
+function buildNishiyamaMail(){
+  const url=LAST_EXPORT?LAST_EXPORT.url:"";
+  const id=LAST_EXPORT?LAST_EXPORT.id:document.getElementById("mId").value;
+  const row=ROWS.find(x=>x.id===id)||{};
+  const person=row.person_name||document.getElementById("mPerson").value||"";
+  const fac=[row.facility_name||"", row.facility_unit||""].filter(Boolean).join("　");
+  const subject=`【StarBoard】在留資格更新 提出書類のご共有（${person}様）`;
+  const body=[
+    "にしやま行政書士事務所","行政書士　西山健二様","",
+    "いつもお世話になっております。株式会社StarBoardです。",
+    `${person}様${fac?`（${fac}）`:""}の在留資格更新につきまして、提出書類を下記のGoogleドライブに格納いたしました。ご確認のほど、よろしくお願いいたします。`,"",
+    "▼ 提出書類フォルダ（Googleドライブ）",
+    url,"",
+    "お忙しいところ恐れ入りますが、何卒よろしくお願いいたします。","",
+    STARBOARD_SIGN
+  ].join("\n");
+  return { subject, body };
+}
+// Gmailの作成画面を開く（宛先・件名・本文を自動入力。送信はご本人が実行）
+function nishiyamaMail(){
+  const m=buildNishiyamaMail();
+  const gmail="https://mail.google.com/mail/?view=cm&fs=1"
+    +"&to="+encodeURIComponent(NISHIYAMA_EMAIL)
+    +"&su="+encodeURIComponent(m.subject)
+    +"&body="+encodeURIComponent(m.body);
+  window.open(gmail,"_blank","noopener");
+}
+async function copyNishiyamaMail(){
+  const m=buildNishiyamaMail();
+  const text="宛先: "+NISHIYAMA_EMAIL+"\n件名: "+m.subject+"\n\n"+m.body;
+  try{ await navigator.clipboard.writeText(text); }
+  catch(e){ const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
+    document.body.appendChild(ta); ta.select(); try{document.execCommand("copy");}catch(_){}; ta.remove(); }
+  const s=document.getElementById("mailCopyOk"); if(s){ s.textContent="✓ コピーしました"; setTimeout(()=>{ s.textContent=""; },3000); }
 }
 
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
