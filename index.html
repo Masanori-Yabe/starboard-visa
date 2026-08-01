@@ -98,6 +98,11 @@
   .chk-file .cf-ok{background:var(--grnbg);color:var(--grn)}
   .chk-file .cf-warn{background:#fef3c7;color:#b45309}
   .badge.warn{background:#fef3c7;color:#b45309;margin-left:4px}
+  /* 準備完了サイン */
+  .drdy:empty{display:none}
+  .drdy{font-size:12px;font-weight:700;border-radius:6px;margin-bottom:8px}
+  .drdy.ok{background:var(--grnbg);color:var(--grn);padding:6px 10px}
+  .drdy.warn{background:#fef3c7;color:#b45309;padding:6px 10px}
   /* 西山先生メール */
   .mail-box{margin-top:10px;padding:10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px}
   .mail-h{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:4px}
@@ -245,6 +250,7 @@
     <div class="chk-sec" id="driveSec" style="display:none">
       <h3>Googleドライブへ出力（西山先生への共有用）</h3>
       <p class="note">「✓ 確認済」の書類を、<b>法人 → 施設 → 案件</b>のフォルダとしてGoogleドライブに出力します。西山先生には親フォルダが共有済みなので、出力すればそのまま閲覧できます。</p>
+      <div id="driveReady" class="drdy"></div>
       <button type="button" class="btn-sm" id="driveBtn" style="background:#0ea5e9;color:#fff" onclick="exportToDrive()">📁 Googleドライブに出力</button>
       <div id="driveMsg" class="msg-ok" style="margin-top:8px;min-height:15px"></div>
     </div>
@@ -586,10 +592,25 @@ function computeProgressFromDOM(vt){
   return {done,total,unv};
 }
 function renderChkProgress(){
-  const el=document.getElementById("chkProg"); if(!el) return;
+  const el=document.getElementById("chkProg");
   const vt=document.getElementById("mVisa").value;
-  if(!CHECKLISTS[vt]){ el.innerHTML=""; return; }
-  el.innerHTML=progressBar(computeProgressFromDOM(vt),"lg");
+  if(el){ el.innerHTML=CHECKLISTS[vt]?progressBar(computeProgressFromDOM(vt),"lg"):""; }
+  renderDriveReady();
+}
+// Drive出力欄の「準備完了サイン」（確認済がすべて揃ったか）
+function renderDriveReady(){
+  const el=document.getElementById("driveReady"); if(!el) return;
+  const vt=document.getElementById("mVisa").value;
+  const pg=CHECKLISTS[vt]?computeProgressFromDOM(vt):null;
+  if(!pg || pg.total===0){ el.className="drdy"; el.innerHTML=""; return; }
+  const remaining=pg.total-pg.done;
+  if(remaining<=0){
+    el.className="drdy ok";
+    el.innerHTML=`🟢 全書類そろいました（確認済 ${pg.done}/${pg.total}）西山先生に送付できます`;
+  }else{
+    el.className="drdy warn";
+    el.innerHTML=`🟠 未確認・未提出が ${remaining}件 あります（確認済 ${pg.done}/${pg.total}）`;
+  }
 }
 
 function cfgReady(){ return !SUPABASE_URL.includes("REPLACE_ME") && !SUPABASE_ANON_KEY.includes("REPLACE_ME"); }
@@ -919,6 +940,13 @@ function buildNishiyamaMail(){
 }
 // Gmailの作成画面を開く（宛先・件名・本文を自動入力。送信はご本人が実行）
 function nishiyamaMail(){
+  // 揃っていない状態なら、送る前に念のため確認（ブロックはしない）
+  const vt=document.getElementById("mVisa").value;
+  const pg=CHECKLISTS[vt]?computeProgressFromDOM(vt):null;
+  if(pg && pg.total>0 && pg.done<pg.total){
+    const remaining=pg.total-pg.done;
+    if(!confirm(`まだ確認できていない書類が ${remaining}件 あります。\nそれでも西山先生へのメールを作成しますか？`)) return;
+  }
   const m=buildNishiyamaMail();
   const gmail="https://mail.google.com/mail/?view=cm&fs=1"
     +"&to="+encodeURIComponent(NISHIYAMA_EMAIL)
