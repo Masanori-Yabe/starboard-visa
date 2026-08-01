@@ -98,6 +98,12 @@
   .chk-file .cf-ok{background:var(--grnbg);color:var(--grn)}
   .chk-file .cf-warn{background:#fef3c7;color:#b45309}
   .badge.warn{background:#fef3c7;color:#b45309;margin-left:4px}
+  /* ドラッグ&ドロップ */
+  .chk-row .dz-hint{display:none}
+  .chk-row.dz{background:#eff6ff;outline:2px dashed var(--blued);outline-offset:-2px;border-radius:6px}
+  .chk-row.dz>*{pointer-events:none}
+  .chk-row.dz .dz-hint{display:inline-flex;align-items:center;position:absolute;right:10px;color:var(--blued);font-weight:700;font-size:11px;background:#eff6ff;padding:0 4px}
+  .chk-row{position:relative}
   .info{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--blued);color:#fff;font-size:10px;font-weight:700;margin-left:5px;cursor:help;position:relative;vertical-align:middle}
   .info.cnd{background:var(--amb)}
   .info:hover .bub{display:block}
@@ -379,7 +385,7 @@ function renderChecklist(visaType, data){
   const sec=document.getElementById("chkSec");
   const tmpl=CHECKLISTS[visaType];
   if(!tmpl){ sec.innerHTML=`<h3>提出書類チェック</h3><p class="note">この在留資格のチェックリストは今後追加予定です。</p>`; return; }
-  let html=`<h3>提出書類チェック</h3><p class="note">①ファイルを「アップロード」＝<b>添付済（未確認）</b>。②中身を開いて内容を確認したら<b>チェック</b>を入れて<b>確認済</b>に。※アップロードだけでは確認済みになりません。</p>`;
+  let html=`<h3>提出書類チェック</h3><p class="note">①ファイルを「アップロード」<b>または各行にドラッグ&ドロップ</b>＝<b>添付済（未確認）</b>。②中身を開いて内容を確認したら<b>チェック</b>を入れて<b>確認済</b>に。※アップロードだけでは確認済みになりません。</p>`;
   for(const party of Object.keys(tmpl)){
     html+=`<div class="chk-grp"><div class="gh">${PARTY_LABEL[party]}</div>`;
     for(const it of tmpl[party]){
@@ -388,12 +394,13 @@ function renderChecklist(visaType, data){
       else if(cur.f) CHK_FILES[it.k]=[{f:cur.f, n:cur.n||"ファイル"}];   // 旧形式(単一)を配列に変換
       const info=it.info?`<span class="info">i<span class="bub">${esc(it.info)}</span></span>`:"";
       const cond=it.cond?`<span class="info cnd">※<span class="bub">${esc(it.cond)}</span></span>`:"";
-      html+=`<div class="chk-row${it.cond?" cond":""}">
+      html+=`<div class="chk-row${it.cond?" cond":""}" id="row_${it.k}" ondragover="dzOver(event,'${it.k}')" ondragleave="dzLeave(event,'${it.k}')" ondrop="dzDrop(event,'${it.k}')">
         <input type="checkbox" id="ck_${it.k}" ${cur.c?"checked":""} onchange="onChk('${it.k}')">
         <span class="cl">${esc(it.l)}${info}${cond}</span>
         <input type="date" id="cd_${it.k}" value="${cur.d||""}">
         <input type="file" id="df_${it.k}" accept="image/*,application/pdf" multiple style="display:none" onchange="uploadDoc('${it.k}')">
         <span class="chk-file" id="cf_${it.k}"></span>
+        <span class="dz-hint">⬇ ここにドロップ</span>
       </div>`;
     }
     html+=`</div>`;
@@ -435,11 +442,17 @@ async function openDoc(e,k,i){
   const {data}=await sb.storage.from("visa-documents").createSignedUrl(f.f,3600);
   if(data&&data.signedUrl) window.open(data.signedUrl,"_blank","noopener");
 }
-async function uploadDoc(k){
-  const id=document.getElementById("mId").value;
+async function uploadDoc(k){          // ファイル選択ボタン経由
   const input=document.getElementById("df_"+k);
-  if(!id){ alert("先に「保存」してからアップロードしてください。"); input.value=""; return; }
-  const files=Array.from(input.files||[]); if(!files.length) return;
+  const files=Array.from(input.files||[]);
+  input.value="";
+  await uploadFiles(k, files);
+}
+// ボタン選択・ドラッグ&ドロップ 共通のアップロード処理
+async function uploadFiles(k, files){
+  if(!files || !files.length) return;
+  const id=document.getElementById("mId").value;
+  if(!id){ alert("先に「保存」してからアップロードしてください。"); return; }
   const box=document.getElementById("cf_"+k); if(box) box.innerHTML='<span class="note" style="font-size:11px">アップロード中...</span>';
   if(!CHK_FILES[k]) CHK_FILES[k]=[];
   for(let i=0;i<files.length;i++){
@@ -449,13 +462,21 @@ async function uploadDoc(k){
     if(error){ alert("アップロード失敗: "+file.name+" / "+error.message); continue; }
     CHK_FILES[k].push({f:path, n:file.name});
   }
-  input.value="";
   // アップロード＝「添付済（未確認）」。入手日だけ自動記入（空なら今日）。※チェック(=確認済)は人が付ける
   const dt=document.getElementById("cd_"+k);
   if(CHK_FILES[k].length && dt && !dt.value) dt.value=todayLocal();
   renderChkFile(k);
   await persistChkItem(k);
 }
+// ドラッグ&ドロップ
+function dzOver(e,k){ e.preventDefault(); if(e.dataTransfer) e.dataTransfer.dropEffect="copy";
+  const row=document.getElementById("row_"+k); if(row) row.classList.add("dz"); }
+function dzLeave(e,k){ const row=document.getElementById("row_"+k);
+  if(row && !row.contains(e.relatedTarget)) row.classList.remove("dz"); }
+async function dzDrop(e,k){ e.preventDefault();
+  const row=document.getElementById("row_"+k); if(row) row.classList.remove("dz");
+  const files=Array.from((e.dataTransfer&&e.dataTransfer.files)||[]);
+  await uploadFiles(k, files); }
 async function deleteDoc(k,i){
   const id=document.getElementById("mId").value; if(!id) return;
   const arr=CHK_FILES[k]||[]; const f=arr[i]; if(!f) return;
@@ -577,6 +598,8 @@ window.addEventListener("DOMContentLoaded", async ()=>{
   ["fStatus","fMethod","fFac","fActive"].forEach(id=>document.getElementById(id).onchange=render);
   document.getElementById("fText").oninput=render;
   document.getElementById("pass").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
+  // 行以外にファイルを落としてもブラウザがファイルを開かないようにする（誤操作防止）
+  ["dragover","drop"].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault(),false));
 });
 
 async function doLogin(){
