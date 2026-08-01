@@ -237,6 +237,12 @@
     <div class="fg"><label>Rakuvisa ID</label><input id="mRak"></div>
     <div class="fg"><label>備考</label><textarea id="mMemo" rows="2"></textarea></div>
     <div class="chk-sec" id="chkSec"></div>
+    <div class="chk-sec" id="driveSec" style="display:none">
+      <h3>Googleドライブへ出力（西山先生への共有用）</h3>
+      <p class="note">「✓ 確認済」の書類を、<b>法人 → 施設 → 案件</b>のフォルダとしてGoogleドライブに出力します。西山先生には親フォルダが共有済みなので、出力すればそのまま閲覧できます。</p>
+      <button type="button" class="btn-sm" id="driveBtn" style="background:#0ea5e9;color:#fff" onclick="exportToDrive()">📁 Googleドライブに出力</button>
+      <div id="driveMsg" class="msg-ok" style="margin-top:8px;min-height:15px"></div>
+    </div>
     <div class="actions">
       <button class="btn-sm" id="mDel" style="background:var(--redbg);color:var(--red)" onclick="delItem()">削除</button>
       <div>
@@ -270,6 +276,8 @@
 // ================== 設定（Supabase作成後に差し替え） ==================
 const SUPABASE_URL      = "https://oentffklzflubrhxomfn.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable__uz-Vm3FUPgAeKJC2UYQhA_jp4hwu48";
+// Apps Script（Drive出力）Webアプリの /exec URL。デプロイ後に設定。空の間は出力ボタンを非表示。
+const GAS_EXPORT_URL    = "";
 // ====================================================================
 
 let sb, ROWS=[], FACS=[], sortKey="deadline", sortAsc=true;
@@ -732,6 +740,9 @@ function openForm(id){
   const vt=m?.visa_type||"特定技能";
   const mVisa=document.getElementById("mVisa"); mVisa.value=vt; mVisa.dataset.prev=vt;
   renderChecklist(vt, m?.checklist||{});
+  const driveSec=document.getElementById("driveSec");
+  driveSec.style.display=(m&&m.id&&GAS_EXPORT_URL)?"block":"none";
+  document.getElementById("driveMsg").textContent="";
   document.getElementById("mDel").style.display=m?"block":"none";
   document.getElementById("mErr").textContent="";
   document.getElementById("ov").classList.add("show");
@@ -833,6 +844,31 @@ async function delItem(){
   const {error}=await sb.from("visa_renewals").delete().eq("id",id);
   if(error){ document.getElementById("mErr").textContent="削除エラー: "+error.message; return; }
   closeForm(); await loadAll();
+}
+
+// 「確認済」の書類をGoogleドライブに出力（Apps Script Webアプリを呼ぶ）
+async function exportToDrive(){
+  const id=document.getElementById("mId").value;
+  if(!id){ alert("先に「保存」してからGoogleドライブに出力してください。"); return; }
+  if(!GAS_EXPORT_URL){ alert("Googleドライブ出力の接続設定がまだ完了していません。"); return; }
+  const btn=document.getElementById("driveBtn"), msg=document.getElementById("driveMsg");
+  const orig=btn.textContent; btn.disabled=true; btn.textContent="出力中…"; msg.style.color=""; msg.textContent="";
+  try{
+    const { data:{ session } }=await sb.auth.getSession();
+    const token=session&&session.access_token;
+    if(!token){ throw new Error("ログイン情報が取得できません。再ログインしてください。"); }
+    // text/plain で送るとCORSプリフライトを回避できる（Apps Script Webアプリ対応）
+    const res=await fetch(GAS_EXPORT_URL, { method:"POST", body:JSON.stringify({ token, caseId:id }) });
+    const out=await res.json();
+    if(out.ok){
+      msg.style.color="var(--grn)";
+      msg.innerHTML=`✓ 出力しました（${out.count}件）　<a href="${esc(out.url)}" target="_blank" rel="noopener" style="font-weight:700">📁 フォルダを開く</a>`;
+    }else{
+      msg.style.color="#b91c1c"; msg.textContent="出力できませんでした: "+(out.error||"不明なエラー");
+    }
+  }catch(e){
+    msg.style.color="#b91c1c"; msg.textContent="通信エラー: "+(e.message||e);
+  }finally{ btn.disabled=false; btn.textContent=orig; }
 }
 
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
