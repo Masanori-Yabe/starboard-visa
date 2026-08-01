@@ -50,6 +50,7 @@
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
   .s-未対応{background:var(--redbg);color:var(--red)} .s-対応中{background:var(--ambbg);color:var(--amb)}
   .s-完了{background:var(--grnbg);color:var(--grn)} .s-対象外{background:var(--graybg);color:var(--gray)}
+  .s-次回待ち{background:#e0e7ff;color:#4338ca}
   .days{font-weight:700}
   .d-over{color:var(--red)} .d-30{color:var(--org)} .d-60{color:var(--amb)} .d-90{color:#0891b2} .d-far{color:var(--sub)}
   .m-未確定{color:var(--red);font-weight:700}
@@ -143,7 +144,7 @@
 
     <div class="filters">
       <select id="fStatus"><option value="">ステータス：すべて</option>
-        <option>未対応</option><option>対応中</option><option>完了</option><option>対象外</option></select>
+        <option>未対応</option><option>対応中</option><option>完了</option><option>対象外</option><option>次回待ち</option></select>
       <select id="fMethod"><option value="">対応方法：すべて</option>
         <option>所属機関と本人</option><option>玉田先生</option><option>Rakuvisa</option><option>西山先生</option><option>未確定</option></select>
       <select id="fFac"><option value="">施設：すべて</option></select>
@@ -192,7 +193,17 @@
       <div class="fg"><label>対応方法 *</label>
         <select id="mMethod"><option>未確定</option><option>所属機関と本人</option><option>玉田先生</option><option>Rakuvisa</option><option>西山先生</option></select></div>
       <div class="fg"><label>状況 *</label>
-        <select id="mStatus"><option>未対応</option><option>対応中</option><option>完了</option><option>対象外</option></select></div>
+        <select id="mStatus" onchange="onStatusChange()"><option>未対応</option><option>対応中</option><option>完了</option><option>対象外</option><option>次回待ち</option></select></div>
+    </div>
+    <div id="nextCycle" style="display:none;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:10px;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;color:var(--blued);margin-bottom:6px">🔄 次回更新の登録（完了時）</div>
+      <div class="row2">
+        <div class="fg" style="margin-bottom:0"><label>新しい在留期限（次回更新期日）</label><input type="date" id="mNextExpiry"></div>
+        <div class="fg" style="margin-bottom:0;display:flex;align-items:flex-end">
+          <label style="font-weight:600;font-size:12px"><input type="checkbox" id="mCreateNext"> 次回の案件を作成する</label>
+        </div>
+      </div>
+      <p class="note" style="font-size:11px;color:var(--sub);margin:6px 0 0">新しい在留カードの在留期限を入力してください。次回は「次回待ち」で登録され、期日3ヶ月前に自動で「未対応」に変わります。介護福祉士取得・特定技能2号など次回更新が不要な場合はチェックを外してください。</p>
     </div>
     <div class="fg"><label>Rakuvisa ID</label><input id="mRak"></div>
     <div class="fg"><label>備考</label><textarea id="mMemo" rows="2"></textarea></div>
@@ -498,19 +509,20 @@ async function loadAll(){
 function renderCards(){
   const c=n=>ROWS.filter(n).length;
   const cUntouched=c(r=>r.status==="未対応"), cDoing=c(r=>r.status==="対応中"),
-        cDone=c(r=>r.status==="完了"), cSkip=c(r=>r.status==="対象外");
+        cDone=c(r=>r.status==="完了"), cSkip=c(r=>r.status==="対象外"), cWait=c(r=>r.status==="次回待ち");
   const over=c(r=>ACTIVE(r)&&r.days_left<0);
   const d30=c(r=>ACTIVE(r)&&r.days_left>=0&&r.days_left<=30);
   const now=new Date(), ym=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
   const thisM=c(r=>ACTIVE(r)&&(r.deadline||"").startsWith(ym));
   const cards=[
     ["alert",over,"期限超過(未処理)"],["warn",d30,"30日以内(未処理)"],["",thisM,"今月期限(未処理)"],
-    ["",cUntouched,"未対応"],["",cDoing,"対応中"],["",cDone,"完了"],["",cSkip,"対象外"]
+    ["",cUntouched,"未対応"],["",cDoing,"対応中"],["",cWait,"次回待ち"],["",cDone,"完了"],["",cSkip,"対象外"]
   ];
   document.getElementById("cards").innerHTML=cards.map(([cl,n,l])=>
     `<div class="card ${cl}"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
 }
 const ACTIVE=r=>r.status==="未対応"||r.status==="対応中";
+const SHOWDAYS=r=>r.status==="未対応"||r.status==="対応中"||r.status==="次回待ち"; // 残日数を表示する状態
 
 // 正式名称（サブ名）表示のヘルパー（同一なら1つだけ表示）
 function withSub(main, sub){
@@ -548,14 +560,14 @@ function daysClass(d){ if(d==null)return"d-far"; if(d<0)return"d-over"; if(d<=30
 function daysText(d){ if(d==null)return"—"; if(d<0)return`${Math.abs(d)}日超過`; return`残${d}日`; }
 
 function rowHtml(r){
-  const dc = ACTIVE(r)?daysClass(r.days_left):"d-far";
+  const dc = SHOWDAYS(r)?daysClass(r.days_left):"d-far";
   const pg=chkProgress(r);
   let badge=`<span class="badge">—</span>`;
   if(pg){ const done=pg.j[0]+pg.s[0], tot=pg.j[1]+pg.s[1];
     badge=`<span class="badge ${done===tot?"done":""}">人${pg.j[0]}/${pg.j[1]} 所${pg.s[0]}/${pg.s[1]}</span>`; }
   return `<tr>
     <td>${r.deadline||""}</td>
-    <td class="days ${dc}">${ACTIVE(r)?daysText(r.days_left):"—"}</td>
+    <td class="days ${dc}">${SHOWDAYS(r)?daysText(r.days_left):"—"}</td>
     <td>${esc(facilityDisp(r))}</td>
     <td>${esc(personDisp(r))}${(r.card_front||r.card_back)?' <span title="在留カード画像あり">🪪</span>':''}</td>
     <td>${esc(r.renewal_count||"")}</td>
@@ -582,6 +594,9 @@ function openForm(id){
   document.getElementById("mCount").value=m?.renewal_count||"初";
   document.getElementById("mMethod").value=m?m.method:"未確定";
   document.getElementById("mStatus").value=m?m.status:"未対応";
+  document.getElementById("mNextExpiry").value="";
+  document.getElementById("mCreateNext").checked=!(m&&m.status==="完了");
+  onStatusChange();
   document.getElementById("mRak").value=m?.rakuvisa_id||"";
   document.getElementById("mMemo").value=m?.memo||"";
   const vt=m?.visa_type||"特定技能";
@@ -593,6 +608,8 @@ function openForm(id){
   document.getElementById("ov").classList.add("show");
 }
 function closeForm(){ document.getElementById("ov").classList.remove("show"); }
+function onStatusChange(){ document.getElementById("nextCycle").style.display = document.getElementById("mStatus").value==="完了"?"block":"none"; }
+function nextCount(c){ return ({"初":"2","2":"3","3":"4","4":"5","5":"5","特技初":"2"})[c] || c; }
 
 // ---------- 施設管理 ----------
 function openFacilities(){
@@ -659,10 +676,22 @@ async function saveItem(){
       memo:document.getElementById("mMemo").value.trim()||null,
       checklist:collectChecklist(visaType),
     };
+    const status=document.getElementById("mStatus").value;
+    const createNext = status==="完了" && document.getElementById("mCreateNext").checked;
+    const nextExp = document.getElementById("mNextExpiry").value;
+    if(createNext && !nextExp){ err.textContent="完了で次回を作成する場合は「新しい在留期限」を入力してください（作成しない場合はチェックを外してください）。"; return; }
     const id=document.getElementById("mId").value;
     const res=id ? await sb.from("visa_renewals").update(rec).eq("id",id)
                  : await sb.from("visa_renewals").insert(rec);
     if(res.error)throw res.error;
+    if(createNext){
+      const nextRec={ deadline:nextExp, facility_id, person_name:person,
+        nickname:document.getElementById("mNick").value.trim()||null,
+        visa_type:visaType, renewal_count:nextCount(document.getElementById("mCount").value),
+        method:document.getElementById("mMethod").value, status:"次回待ち", checklist:{} };
+      const r2=await sb.from("visa_renewals").insert(nextRec);
+      if(r2.error)throw r2.error;
+    }
     closeForm(); await loadAll();
   }catch(e){ err.textContent="保存エラー: "+(e.message||e); }
 }
