@@ -81,14 +81,19 @@
   .chk-row .cl{flex:1;font-size:12.5px;line-height:1.35}
   .chk-row>input[type=date]{width:132px;flex:none;padding:4px 6px;border:1px solid var(--line);border-radius:5px;font-size:12px}
   .chk-row.cond .cl{color:var(--sub)}
-  /* 書類ファイル添付 */
-  .chk-file{flex:none;width:150px;display:flex;align-items:center;gap:4px;font-size:11px}
+  /* 書類ファイル添付（複数可） */
+  .chk-row{align-items:flex-start}
+  .chk-row>input[type=checkbox]{margin-top:2px}
+  .chk-file{flex:none;width:162px;display:flex;flex-direction:column;align-items:flex-start;gap:2px;font-size:11px}
   .chk-file .cf-up{background:var(--graybg);color:var(--ink);border:1px dashed var(--line);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:11px;white-space:nowrap}
   .chk-file .cf-up:hover{background:#eef2f7}
-  .chk-file .cf-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blued);text-decoration:none}
+  .chk-file .cf-item{display:flex;align-items:center;gap:2px;max-width:100%}
+  .chk-file .cf-name{max-width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blued);text-decoration:none}
   .chk-file .cf-name:hover{text-decoration:underline}
   .chk-file .cf-del{flex:none;border:none;background:none;color:var(--sub);cursor:pointer;font-size:13px;padding:0 2px;line-height:1}
   .chk-file .cf-del:hover{color:#dc2626}
+  .chk-file .cf-add{color:var(--blued);cursor:pointer;font-size:11px;margin-top:1px}
+  .chk-file .cf-add:hover{text-decoration:underline}
   .info{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--blued);color:#fff;font-size:10px;font-weight:700;margin-left:5px;cursor:help;position:relative;vertical-align:middle}
   .info.cnd{background:var(--amb)}
   .info:hover .bub{display:block}
@@ -374,14 +379,15 @@ function renderChecklist(visaType, data){
     html+=`<div class="chk-grp"><div class="gh">${PARTY_LABEL[party]}</div>`;
     for(const it of tmpl[party]){
       const cur=data[it.k]||{};
-      if(cur.f) CHK_FILES[it.k]={f:cur.f, n:cur.n||"ファイル"};
+      if(cur.files && cur.files.length) CHK_FILES[it.k]=cur.files.slice();
+      else if(cur.f) CHK_FILES[it.k]=[{f:cur.f, n:cur.n||"ファイル"}];   // 旧形式(単一)を配列に変換
       const info=it.info?`<span class="info">i<span class="bub">${esc(it.info)}</span></span>`:"";
       const cond=it.cond?`<span class="info cnd">※<span class="bub">${esc(it.cond)}</span></span>`:"";
       html+=`<div class="chk-row${it.cond?" cond":""}">
         <input type="checkbox" id="ck_${it.k}" ${cur.c?"checked":""} onchange="onChk('${it.k}')">
         <span class="cl">${esc(it.l)}${info}${cond}</span>
         <input type="date" id="cd_${it.k}" value="${cur.d||""}">
-        <input type="file" id="df_${it.k}" accept="image/*,application/pdf" style="display:none" onchange="uploadDoc('${it.k}')">
+        <input type="file" id="df_${it.k}" accept="image/*,application/pdf" multiple style="display:none" onchange="uploadDoc('${it.k}')">
         <span class="chk-file" id="cf_${it.k}"></span>
       </div>`;
     }
@@ -400,41 +406,53 @@ function renderChecklist(visaType, data){
 }
 function renderChkFile(k){
   const box=document.getElementById("cf_"+k); if(!box) return;
-  const f=CHK_FILES[k];
-  if(f){
-    box.innerHTML=`<a class="cf-name" id="cflink_${k}" href="#" onclick="openDoc(event,'${k}')" title="${esc(f.n)}">📎 ${esc(f.n)}</a>
-      <button type="button" class="cf-del" title="削除" onclick="deleteDoc('${k}')">✕</button>`;
+  const arr=CHK_FILES[k]||[];
+  if(arr.length){
+    let h="";
+    arr.forEach((f,i)=>{
+      h+=`<span class="cf-item"><a class="cf-name" href="#" onclick="openDoc(event,'${k}',${i})" title="${esc(f.n)}">📎 ${esc(f.n)}</a>`
+        +`<button type="button" class="cf-del" title="削除" onclick="deleteDoc('${k}',${i})">✕</button></span>`;
+    });
+    h+=`<span class="cf-add" title="ファイルを追加" onclick="document.getElementById('df_${k}').click()">＋ 追加</span>`;
+    box.innerHTML=h;
   } else {
     box.innerHTML=`<span class="cf-up" onclick="document.getElementById('df_${k}').click()">⬆ アップロード</span>`;
   }
 }
-async function openDoc(e,k){
+async function openDoc(e,k,i){
   e.preventDefault();
-  const f=CHK_FILES[k]; if(!f) return;
+  const f=(CHK_FILES[k]||[])[i]; if(!f) return;
   const {data}=await sb.storage.from("visa-documents").createSignedUrl(f.f,3600);
   if(data&&data.signedUrl) window.open(data.signedUrl,"_blank","noopener");
 }
 async function uploadDoc(k){
   const id=document.getElementById("mId").value;
-  if(!id){ alert("先に「保存」してからアップロードしてください。"); document.getElementById("df_"+k).value=""; return; }
-  const file=document.getElementById("df_"+k).files[0]; if(!file) return;
+  const input=document.getElementById("df_"+k);
+  if(!id){ alert("先に「保存」してからアップロードしてください。"); input.value=""; return; }
+  const files=Array.from(input.files||[]); if(!files.length) return;
   const box=document.getElementById("cf_"+k); if(box) box.innerHTML='<span class="note" style="font-size:11px">アップロード中...</span>';
-  const path=`${id}/${k}`;
-  const {error}=await sb.storage.from("visa-documents").upload(path,file,{upsert:true,contentType:file.type});
-  if(error){ alert("アップロード失敗: "+error.message); renderChkFile(k); return; }
-  CHK_FILES[k]={f:path, n:file.name};
-  // アップロードで自動チェック＋入手日（空なら今日）
+  if(!CHK_FILES[k]) CHK_FILES[k]=[];
+  for(let i=0;i<files.length;i++){
+    const file=files[i];
+    const path=`${id}/${k}/${Date.now()}_${i}`;   // 同一項目でも複数ファイルを区別
+    const {error}=await sb.storage.from("visa-documents").upload(path,file,{upsert:true,contentType:file.type});
+    if(error){ alert("アップロード失敗: "+file.name+" / "+error.message); continue; }
+    CHK_FILES[k].push({f:path, n:file.name});
+  }
+  input.value="";
+  // ファイルが1つでも付いたら自動チェック＋入手日（空なら今日）
   const cb=document.getElementById("ck_"+k), dt=document.getElementById("cd_"+k);
-  if(cb) cb.checked=true;
-  if(dt && !dt.value) dt.value=todayLocal();
+  if(CHK_FILES[k].length){ if(cb) cb.checked=true; if(dt && !dt.value) dt.value=todayLocal(); }
   renderChkFile(k);
   await persistChkItem(k);
 }
-async function deleteDoc(k){
+async function deleteDoc(k,i){
   const id=document.getElementById("mId").value; if(!id) return;
-  if(!confirm("この書類ファイルを削除しますか？（チェックは残ります）")) return;
-  await sb.storage.from("visa-documents").remove([`${id}/${k}`]);
-  delete CHK_FILES[k];
+  const arr=CHK_FILES[k]||[]; const f=arr[i]; if(!f) return;
+  if(!confirm(`このファイル「${f.n}」を削除しますか？`)) return;
+  await sb.storage.from("visa-documents").remove([f.f]);
+  arr.splice(i,1);
+  if(!arr.length) delete CHK_FILES[k];
   renderChkFile(k);
   await persistChkItem(k);
 }
@@ -445,7 +463,7 @@ async function persistChkItem(k){
   const cl=Object.assign({}, (row&&row.checklist)||{});
   const cb=document.getElementById("ck_"+k), dt=document.getElementById("cd_"+k);
   const item={c:!!(cb&&cb.checked), d:(dt&&dt.value)||null};
-  if(CHK_FILES[k]){ item.f=CHK_FILES[k].f; item.n=CHK_FILES[k].n; }
+  if(CHK_FILES[k] && CHK_FILES[k].length) item.files=CHK_FILES[k];
   cl[k]=item;
   const {error}=await sb.from("visa_renewals").update({checklist:cl}).eq("id",id);
   if(error){ alert("保存失敗: "+error.message); return; }
@@ -461,10 +479,10 @@ function collectChecklist(visaType){
   const out={};
   for(const party of Object.keys(tmpl)) for(const it of tmpl[party]){
     const cb=document.getElementById("ck_"+it.k), dt=document.getElementById("cd_"+it.k);
-    const hasFile=!!CHK_FILES[it.k];
+    const hasFile=!!(CHK_FILES[it.k] && CHK_FILES[it.k].length);
     if(cb && (cb.checked || (dt&&dt.value) || hasFile)){
       out[it.k]={c:!!cb.checked, d:(dt&&dt.value)||null};
-      if(hasFile){ out[it.k].f=CHK_FILES[it.k].f; out[it.k].n=CHK_FILES[it.k].n; }
+      if(hasFile) out[it.k].files=CHK_FILES[it.k];
     }
   }
   return out;
