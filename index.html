@@ -386,7 +386,15 @@ function renderChecklist(visaType, data){
   const sec=document.getElementById("chkSec");
   const tmpl=CHECKLISTS[visaType];
   if(!tmpl){ sec.innerHTML=`<h3>提出書類チェック</h3><p class="note">この在留資格のチェックリストは今後追加予定です。</p>`; return; }
-  let html=`<h3>提出書類チェック</h3><p class="note">①ファイルを「アップロード」<b>または各行にドラッグ&ドロップ</b>＝<b>添付済（未確認）</b>。②中身を開いて内容を確認したら<b>チェック</b>を入れて<b>確認済</b>に。※アップロードだけでは確認済みになりません。</p><div id="chkProg"></div>`;
+  const msgBox=`<h3>依頼メッセージ</h3><p class="note">まず最初に、必要書類を人材・所属機関へ依頼します（まだ届いていない書類を自動で一覧化）。届いたら下の「提出書類チェック」で確認します。</p>
+    <div class="msg-box">
+      <div class="msg-btns">
+        <button type="button" class="btn-sm msg-w" onclick="copyMsg('worker')">📋 人材向けをコピー（日本語＋インドネシア語）</button>
+        <button type="button" class="btn-sm msg-o" onclick="copyMsg('org')">📋 所属機関向けをコピー</button>
+      </div>
+      <div id="copyMsg" class="msg-ok"></div>
+    </div>`;
+  let html=msgBox+`<h3 style="margin-top:16px">提出書類チェック</h3><p class="note">①ファイルを「アップロード」<b>または各行にドラッグ&ドロップ</b>＝<b>添付済（未確認）</b>。②中身を開いて内容を確認したら<b>チェック</b>を入れて<b>確認済</b>に。※アップロードだけでは確認済みになりません。</p><div id="chkProg"></div>`;
   for(const party of Object.keys(tmpl)){
     html+=`<div class="chk-grp"><div class="gh">${PARTY_LABEL[party]}</div>`;
     for(const it of tmpl[party]){
@@ -406,14 +414,6 @@ function renderChecklist(visaType, data){
     }
     html+=`</div>`;
   }
-  html+=`<div class="msg-box">
-    <div class="msg-ttl">依頼メッセージ（まだ届いていない書類を自動で一覧化）</div>
-    <div class="msg-btns">
-      <button type="button" class="btn-sm msg-w" onclick="copyMsg('worker')">📋 人材向けをコピー（日本語＋インドネシア語）</button>
-      <button type="button" class="btn-sm msg-o" onclick="copyMsg('org')">📋 所属機関向けをコピー</button>
-    </div>
-    <div id="copyMsg" class="msg-ok"></div>
-  </div>`;
   sec.innerHTML=html;
   for(const party of Object.keys(tmpl)) for(const it of tmpl[party]) renderChkFile(it.k);
   renderChkProgress();
