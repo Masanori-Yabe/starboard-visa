@@ -264,6 +264,7 @@
     </div>
     <div class="fg"><label>Rakuvisa ID</label><input id="mRak"></div>
     <div class="fg"><label>備考</label><textarea id="mMemo" rows="2"></textarea></div>
+    <div class="chk-sec" id="linkSec"></div>
     <div class="chk-sec" id="chkSec"></div>
     <div class="chk-sec" id="intakeSec"></div>
     <div class="chk-sec" id="driveSec" style="display:none">
@@ -571,7 +572,7 @@ async function onChk(k){ const cb=document.getElementById("ck_"+k), dt=document.
 function onVisaChange(){ const sel=document.getElementById("mVisa");
   const carried=collectChecklist(sel.dataset.prev||sel.value);
   const intakeCarried=collectIntake(); sel.dataset.prev=sel.value;
-  renderChecklist(sel.value, carried); renderIntakeFor(sel.value, intakeCarried); }
+  renderLinkSection(sel.value); renderChecklist(sel.value, carried); renderIntakeFor(sel.value, intakeCarried); }
 function collectChecklist(visaType){
   const tmpl=CHECKLISTS[visaType]; if(!tmpl) return {};
   const out={};
@@ -591,13 +592,25 @@ function renderIntakeFor(visaType, data){
   if(visaType!=="特定技能"){ sec.innerHTML=""; return; }
   renderIntake(data||{});
 }
+// 記入リンク（提出書類チェックの上・起点として一番最初に表示）
+function renderLinkSection(visaType){
+  const sec=document.getElementById("linkSec"); if(!sec) return;
+  if(visaType!=="特定技能"){ sec.innerHTML=""; return; }
+  sec.innerHTML=`<h3>🔗 記入リンク（まず最初に：本人・施設へ送る）</h3>
+    <p class="note">手続きの起点です。ボタンを押すと<b>リンク入りの依頼文</b>がコピーされます。人材用は<b>WhatsApp</b>（日本語＋インドネシア語）、施設用は<b>メール</b>にそのまま貼り付けて送ってください。相手はログイン不要で記入・書類アップロードでき、内容はこの案件（下の「提出書類チェック」「確認事項」）に自動反映されます。</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="btn-sm" style="background:#16a34a;color:#fff" onclick="issueIntakeLink('worker')">📋 人材用の依頼文（リンク付き）をコピー</button>
+      <button type="button" class="btn-sm" style="background:#0ea5e9;color:#fff" onclick="issueIntakeLink('org')">📋 施設用の依頼文（リンク付き）をコピー</button>
+    </div>
+    <div id="ikLinkMsg" class="msg-ok" style="margin-top:8px;min-height:15px"></div>`;
+}
 function renderIntake(data){
   data=data||{};
   const sec=document.getElementById("intakeSec");
   const field=data.field||"その他";
   const v=k=>esc(data[k]!=null?data[k]:"");
   sec.innerHTML=`<h3>確認事項（人材・所属機関に確認する情報）</h3>
-    <p class="note">書類の代わりに確認が必要な情報です。スタッフが直接入力するほか、下の「🔗 記入リンク」を送れば本人・施設が入力した内容もここに反映されます。</p>
+    <p class="note">書類の代わりに確認が必要な情報です。スタッフが直接入力するほか、上の「🔗 記入リンク」を送れば本人・施設が入力した内容もここに反映されます。</p>
     <div class="chk-grp">
       <div class="intk-row"><label class="ik-l">特定技能の分野</label>
         <select id="ik_field" onchange="onFieldChange()">
@@ -654,15 +667,6 @@ function renderIntake(data){
       <div class="intk-row"><label class="ik-l care-sub">└ EPA介護福祉士（国家試験合格）</label><input type="number" id="ik_care_epa" value="${v('care_epa')}" style="width:100px"><span class="ik-unit">人</span></div>
       <div class="intk-row"><label class="ik-l care-sub">└ 在留資格「介護」により在留する者</label><input type="number" id="ik_care_zairyu" value="${v('care_zairyu')}" style="width:100px"><span class="ik-unit">人</span></div>
       <div class="intk-row"><label class="ik-l care-sub">└ 身分・地位に基づく在留資格</label><input type="number" id="ik_care_mibun" value="${v('care_mibun')}" style="width:100px"><span class="ik-unit">人</span></div>
-    </div>
-    <div class="chk-grp" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px">
-      <div class="gh">🔗 記入リンク（本人・施設に直接入力してもらう）</div>
-      <p class="note">ボタンを押すと、<b>リンク入りの依頼文</b>がコピーされます。人材用は<b>WhatsApp</b>（日本語＋インドネシア語）、施設用は<b>メール</b>にそのまま貼り付けて送ってください。相手はログイン不要で記入・アップロードでき、この案件に反映されます。</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn-sm" style="background:#16a34a;color:#fff" onclick="issueIntakeLink('worker')">📋 人材用の依頼文（リンク付き）をコピー</button>
-        <button type="button" class="btn-sm" style="background:#0ea5e9;color:#fff" onclick="issueIntakeLink('org')">📋 施設用の依頼文（リンク付き）をコピー</button>
-      </div>
-      <div id="ikLinkMsg" class="msg-ok" style="margin-top:8px;min-height:15px"></div>
     </div>`;
   const wh=(data.work_history&&data.work_history.length)?data.work_history:[];
   wh.forEach(w=>addWorkRow(w));
@@ -969,6 +973,7 @@ function openForm(id){
   document.getElementById("mMemo").value=m?.memo||"";
   const vt=m?.visa_type||"特定技能";
   const mVisa=document.getElementById("mVisa"); mVisa.value=vt; mVisa.dataset.prev=vt;
+  renderLinkSection(vt);
   renderChecklist(vt, m?.checklist||{});
   renderIntakeFor(vt, m?.intake||{});
   const driveSec=document.getElementById("driveSec");
