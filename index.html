@@ -108,6 +108,24 @@
   .mail-h{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:4px}
   .mail-sub{font-size:11px;color:var(--sub);margin-bottom:8px;word-break:break-all}
   .mail-btns{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  /* 確認事項（intake） */
+  .intk-row{display:flex;align-items:center;gap:8px;padding:4px 0;flex-wrap:wrap}
+  .intk-row .ik-l{flex:none;width:210px;font-size:12.5px;color:var(--ink)}
+  .intk-row .ik-l.care-sub{padding-left:14px;color:var(--sub)}
+  .intk-row input[type=date],.intk-row input[type=number],.intk-row input[type=text],.intk-row input[type=email],.intk-row select{padding:4px 6px;border:1px solid var(--line);border-radius:5px;font-size:12.5px}
+  .intk-row .ik-grow{flex:1;min-width:180px}
+  .ik-note{font-size:11px;color:var(--sub)}
+  .intk-note-row{font-size:11px;color:#b45309;background:#fef3c7;border-radius:5px;padding:4px 8px;margin:2px 0 6px}
+  .ik-unit{font-size:12px;color:var(--sub)}
+  .ik-radio{font-size:12.5px;display:inline-flex;align-items:center;gap:3px;margin-right:8px}
+  .ik-imp{font-size:10px;font-weight:700;color:#fff;background:#dc2626;border-radius:4px;padding:1px 5px;margin-left:4px}
+  .intk-sub{margin-top:8px;padding-top:6px;border-top:1px dashed var(--line)}
+  .wh-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;flex-wrap:wrap}
+  .wh-row .wh-company{flex:1;min-width:160px;padding:4px 6px;border:1px solid var(--line);border-radius:5px;font-size:12.5px}
+  .wh-row input[type=month]{padding:4px 6px;border:1px solid var(--line);border-radius:5px;font-size:12px}
+  .wh-row .wh-tilde{color:var(--sub)}
+  .wh-row .wh-del{border:none;background:none;color:var(--sub);cursor:pointer;font-size:14px;padding:0 4px}
+  .wh-row .wh-del:hover{color:#dc2626}
   /* ドラッグ&ドロップ */
   .chk-row .dz-hint{display:none}
   .chk-row.dz{background:#eff6ff;outline:2px dashed var(--blued);outline-offset:-2px;border-radius:6px}
@@ -247,6 +265,7 @@
     <div class="fg"><label>Rakuvisa ID</label><input id="mRak"></div>
     <div class="fg"><label>備考</label><textarea id="mMemo" rows="2"></textarea></div>
     <div class="chk-sec" id="chkSec"></div>
+    <div class="chk-sec" id="intakeSec"></div>
     <div class="chk-sec" id="driveSec" style="display:none">
       <h3>Googleドライブへ出力（西山先生への共有用）</h3>
       <p class="note">「✓ 確認済」の書類を、<b>法人 → 施設 → 案件</b>のフォルダとしてGoogleドライブに出力します。西山先生には親フォルダが共有済みなので、出力すればそのまま閲覧できます。</p>
@@ -300,28 +319,14 @@ const KAZEI_INFO="「今、役所で取れる一番新しい年度のもの」�
 const CHECKLISTS = {
   "特定技能": {
     "人材": [
-      {k:"cost_notice", l:"費用の事前案内（印紙5,500円／レターパックライト青2部／証明書代）"},
       {k:"photo", l:"証明写真（3ヶ月以内・スマホ可）"},
       {k:"passport", l:"パスポート（顔写真ページ）"},
       {k:"card", l:"在留カード（表裏）"},
       {k:"gensen", l:"源泉徴収票（直近年度）"},
       {k:"kazei", l:"課税証明書（最新年度）", info:KAZEI_INFO},
       {k:"nozei", l:"納税証明書（最新年度）", info:KAZEI_INFO},
-      {k:"kyu_zei", l:"旧住所の課税・納税証明書", cond:"1月1日時点の住所が現住所と異なる場合のみ"},
-      {k:"email", l:"メールアドレス（連絡・署名用）"},
-      {k:"mendan", l:"本人確認面談の実施"},
     ],
-    "所属機関": [
-      {k:"keiyaku", l:"特定技能雇用契約書（1-5号・社印）"},
-      {k:"joken", l:"雇用条件書（1-6号・社印）"},
-      {k:"chingin", l:"賃金・控除の最新状況"},
-      {k:"choshu", l:"徴収費用の説明書（1-9号）", cond:"寮費・水道光熱費等を徴収している場合"},
-      {k:"nofu", l:"社会保険料・労働保険料・税金の納付状況"},
-      {k:"kyoryoku", l:"協力確認書の提出有無／年月日"},
-      {k:"gaiyo", l:"特定技能所属機関概要書（2-1号）", cond:"前回から変更があった場合"},
-      {k:"toki", l:"登記事項証明書", cond:"前回から変更があった場合"},
-      {k:"kessan", l:"決算文書（貸借対照表・損益計算書）"},
-    ]
+    "所属機関": []   // 所属機関からのアップロードは廃止（確認事項に集約）
   }
   // 技術・人文知識・国際業務 は今後追加
 };
@@ -342,8 +347,30 @@ const MSG_ID={
   cost:"※Untuk perpanjangan, akan dikenakan biaya riil seperti biaya materai sebesar 5.500 yen.",
   done:"Saat ini tidak ada dokumen yang perlu Anda serahkan. Terima kasih atas kerja samanya."
 };
-// 人材メッセージに載せる書類（checklistキーと一致。cost_notice/mendanは除外）
-const WORKER_ORDER=["photo","passport","card","gensen","kazei","nozei","kyu_zei","email"];
+// 人材メッセージに載せる書類（checklistキーと一致）
+const WORKER_ORDER=["photo","passport","card","gensen","kazei","nozei"];
+// 人材に「記入して教えてもらう」確認事項（intakeキーと一致・ID訳はDeepL）
+const WORKER_QUESTIONS=[
+  {k:"spouse",       jp:"配偶者の有無（既婚か未婚か）", id:"Status perkawinan (sudah menikah atau belum menikah)"},
+  {k:"landing_date", jp:"上陸許可年月日（初めて日本への上陸を許可された年月日）", id:"Tanggal dan tahun izin masuk (tanggal dan tahun pertama kali diizinkan masuk ke Jepang)"},
+  {k:"email",        jp:"ご本人のメールアドレス", id:"Alamat email yang bersangkutan"},
+  {k:"phone",        jp:"連絡の取れる携帯電話番号（インドネシアの電話番号は使えません。難しい場合は勤務先の電話番号を教えてください）", id:"Nomor ponsel yang dapat dihubungi (nomor telepon Indonesia tidak dapat digunakan. Jika sulit, mohon berikan nomor telepon tempat kerja Anda)"},
+  {k:"work_history", jp:"日本に入国してからの職歴（勤務先の名称・入社年月・退社年月。複数ある場合はすべて記入してください）", id:"Riwayat pekerjaan sejak masuk ke Jepang (nama perusahaan, bulan dan tahun mulai bekerja, bulan dan tahun berhenti bekerja. Jika ada lebih dari satu, harap cantumkan semuanya)"},
+];
+// 所属機関に確認する事項（共通／介護のみ）
+const ORG_QUESTIONS=[
+  {k:"fac_sales", l:"年間売上金額"},
+  {k:"fac_staff", l:"常勤職員数"},
+];
+const ORG_CARE_QUESTIONS=[
+  {k:"care_office", l:"事業所の名称"},
+  {k:"care_ssw",    l:"現在受け入れている1号特定技能外国人の数"},
+  {k:"care_total",  l:"日本人等の常勤の介護職員の数（合計）"},
+  {k:"care_jp",     l:"　└ うち 日本人"},
+  {k:"care_epa",    l:"　└ うち EPA介護福祉士（国家試験合格）"},
+  {k:"care_zairyu", l:"　└ うち 在留資格「介護」により在留する者"},
+  {k:"care_mibun",  l:"　└ うち 身分・地位に基づく在留資格により在留する者"},
+];
 const WORKER_ITEMS={
   photo:{jp:"証明写真（3か月以内・スマートフォンでの撮影でも可）", id:"Foto identitas (diambil dalam 3 bulan terakhir; boleh diambil dengan ponsel pintar)"},
   passport:{jp:"パスポート（顔写真のページ）", id:"Paspor (halaman foto wajah)"},
@@ -356,30 +383,44 @@ const WORKER_ITEMS={
 };
 
 const HAS=x=>!!(x && (x.c || (x.files&&x.files.length)));   // 確認済 または 添付済(受領済)
-function buildWorkerMsg(name, cl){
-  const need=WORKER_ORDER.filter(k=>!HAS(cl[k]));
+const intakeFilled=(intake,k)=> k==="work_history" ? !!(intake.work_history&&intake.work_history.length)
+                                                    : !!(intake[k]&&String(intake[k]).trim());
+function buildWorkerMsg(name, cl, intake){
+  intake=intake||{};
+  const needDocs=WORKER_ORDER.filter(k=>!HAS(cl[k]));
+  const needQ=WORKER_QUESTIONS.filter(q=>!intakeFilled(intake,q.k));
   let jp,id;
-  if(need.length){
-    jp=[`${name}さん、こんにちは。StarBoardです。`, MSG_JP.intro, "", MSG_JP.head,
-        ...need.map(k=>"・"+WORKER_ITEMS[k].jp), "", MSG_JP.cost, "", MSG_JP.foot].join("\n");
-    id=[`Halo ${name}, ini dari StarBoard.`, MSG_ID.intro, "", MSG_ID.head,
-        ...need.map(k=>"- "+WORKER_ITEMS[k].id), "", MSG_ID.cost, "", MSG_ID.foot].join("\n");
-  } else {
+  if(!needDocs.length && !needQ.length){
     jp=[`${name}さん、こんにちは。StarBoardです。`, MSG_JP.done].join("\n");
     id=[`Halo ${name}, ini dari StarBoard.`, MSG_ID.done].join("\n");
+    return jp + "\n\n———————————\n\n" + id;
   }
-  return jp + "\n\n———————————\n\n" + id;
+  const jpL=[`${name}さん、こんにちは。StarBoardです。`, MSG_JP.intro];
+  const idL=[`Halo ${name}, ini dari StarBoard.`, MSG_ID.intro];
+  if(needDocs.length){
+    jpL.push("", MSG_JP.head, ...needDocs.map(k=>"・"+WORKER_ITEMS[k].jp));
+    idL.push("", MSG_ID.head, ...needDocs.map(k=>"- "+WORKER_ITEMS[k].id));
+  }
+  if(needQ.length){
+    jpL.push("", "【教えていただきたいこと】", ...needQ.map(q=>"・"+q.jp));
+    idL.push("", "【Mohon informasikan hal berikut】", ...needQ.map(q=>"- "+q.id));
+  }
+  jpL.push("", MSG_JP.cost, "", MSG_JP.foot);
+  idL.push("", MSG_ID.cost, "", MSG_ID.foot);
+  return jpL.join("\n") + "\n\n———————————\n\n" + idL.join("\n");
 }
-function buildOrgMsg(facility, name, cl){
-  const tmpl=CHECKLISTS["特定技能"]["所属機関"];
-  const need=tmpl.filter(it=>!HAS(cl[it.k]));
-  const body = need.length
-    ? ["【ご確認・ご準備いただく事項】", ...need.map(it=>"・"+it.l+(it.cond?`（${it.cond}）`:""))].join("\n")
-    : "現在お願いしている確認事項はございません。ご協力ありがとうございます。";
+function buildOrgMsg(facility, name, intake){
+  intake=intake||{};
+  const need=ORG_QUESTIONS.filter(x=>!intakeFilled(intake,x.k));
+  const needCare = intake.field==="介護" ? ORG_CARE_QUESTIONS.filter(x=>!intakeFilled(intake,x.k)) : [];
+  const lines=[];
+  if(need.length) lines.push("【ご確認いただく事項】", ...need.map(x=>"・"+x.l));
+  if(needCare.length){ if(lines.length) lines.push(""); lines.push("【介護分野の事業所概要（分野参考様式第1-2号）】", ...needCare.map(x=>"・"+x.l)); }
+  const body = lines.length ? lines.join("\n") : "現在お願いしている確認事項はございません。ご協力ありがとうございます。";
   return [
     `${facility} ご担当者様`, "",
     "いつもお世話になっております。株式会社StarBoardです。",
-    `${name}様の在留資格（特定技能）の更新手続きにあたり、下記についてご確認・ご準備をお願いいたします。`, "",
+    `${name}様の在留資格（特定技能）の更新手続きにあたり、下記についてご回答をお願いいたします。`, "",
     body, "",
     "お手数をおかけしますが、よろしくお願いいたします。"
   ].join("\n");
@@ -391,9 +432,10 @@ async function copyMsg(kind){
   const nick=(document.getElementById("mNick").value||"").trim();
   const fac=(document.getElementById("mFacNew").value.trim()||document.getElementById("mFac").value||"（貴社）");
   const cl=collectChecklist(vt);
+  const intake=collectIntake();
   // 人材向けは呼びかけにニックネーム（なければ正式名称）／所属機関向けは正式名称
-  const text = kind==="worker" ? buildWorkerMsg(nick||official||"（お名前）",cl)
-                               : buildOrgMsg(fac, official||nick||"（お名前）", cl);
+  const text = kind==="worker" ? buildWorkerMsg(nick||official||"（お名前）", cl, intake)
+                               : buildOrgMsg(fac, official||nick||"（お名前）", intake);
   try{ await navigator.clipboard.writeText(text); }
   catch(e){ const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
     document.body.appendChild(ta); ta.select(); try{document.execCommand("copy");}catch(_){}
@@ -420,6 +462,7 @@ function renderChecklist(visaType, data){
     </div>`;
   let html=msgBox+`<h3 style="margin-top:16px">提出書類チェック</h3><p class="note">①ファイルを「アップロード」<b>または各行にドラッグ&ドロップ</b>＝<b>添付済（未確認）</b>。②中身を開いて内容を確認したら<b>チェック</b>を入れて<b>確認済</b>に。※アップロードだけでは確認済みになりません。</p><div id="chkProg"></div>`;
   for(const party of Object.keys(tmpl)){
+    if(!tmpl[party] || !tmpl[party].length) continue;   // 空グループ（所属機関=書類なし）はスキップ
     html+=`<div class="chk-grp"><div class="gh">${PARTY_LABEL[party]}</div>`;
     for(const it of tmpl[party]){
       const cur=data[it.k]||{};
@@ -534,8 +577,9 @@ async function onChk(k){ const cb=document.getElementById("ck_"+k), dt=document.
   renderChkProgress();           // 進捗バーを即更新
   await persistChkItem(k); }     // 確認操作をその場で保存（保存ボタン待ちで消えない）
 function onVisaChange(){ const sel=document.getElementById("mVisa");
-  const carried=collectChecklist(sel.dataset.prev||sel.value); sel.dataset.prev=sel.value;
-  renderChecklist(sel.value, carried); }
+  const carried=collectChecklist(sel.dataset.prev||sel.value);
+  const intakeCarried=collectIntake(); sel.dataset.prev=sel.value;
+  renderChecklist(sel.value, carried); renderIntakeFor(sel.value, intakeCarried); }
 function collectChecklist(visaType){
   const tmpl=CHECKLISTS[visaType]; if(!tmpl) return {};
   const out={};
@@ -546,6 +590,115 @@ function collectChecklist(visaType){
       out[it.k]={c:!!cb.checked, d:(dt&&dt.value)||null};
       if(hasFile) out[it.k].files=CHK_FILES[it.k];
     }
+  }
+  return out;
+}
+// ===== 確認事項（人材・所属機関に確認する情報） =====
+function renderIntakeFor(visaType, data){
+  const sec=document.getElementById("intakeSec");
+  if(visaType!=="特定技能"){ sec.innerHTML=""; return; }
+  renderIntake(data||{});
+}
+function renderIntake(data){
+  data=data||{};
+  const sec=document.getElementById("intakeSec");
+  const field=data.field||"その他";
+  const v=k=>esc(data[k]!=null?data[k]:"");
+  sec.innerHTML=`<h3>確認事項（人材・所属機関に確認する情報）</h3>
+    <p class="note">書類の代わりに確認が必要な情報です。分かった項目から入力してください（依頼メッセージにも自動反映されます）。</p>
+    <div class="chk-grp">
+      <div class="intk-row"><label class="ik-l">特定技能の分野</label>
+        <select id="ik_field" onchange="onFieldChange()">
+          <option${field!=="介護"?" selected":""}>その他</option>
+          <option${field==="介護"?" selected":""}>介護</option>
+        </select>
+        <span class="ik-note">「介護」を選ぶと介護分野の確認項目が表示されます</span>
+      </div>
+    </div>
+    <div class="chk-grp">
+      <div class="gh">🧑 人材への確認事項</div>
+      <div class="intk-row"><label class="ik-l">配偶者の有無</label>
+        <label class="ik-radio"><input type="radio" name="ik_spouse" value="有" ${data.spouse==="有"?"checked":""}> 有</label>
+        <label class="ik-radio"><input type="radio" name="ik_spouse" value="無" ${data.spouse==="無"?"checked":""}> 無</label>
+      </div>
+      <div class="intk-row"><label class="ik-l">上陸許可年月日 <span class="ik-imp">重要</span></label>
+        <input type="date" id="ik_landing_date" value="${v('landing_date')}">
+        <span class="ik-note">初めて日本への上陸を許可された年月日</span>
+      </div>
+      <div class="intk-row"><label class="ik-l">本人メールアドレス</label>
+        <input type="email" id="ik_email" class="ik-grow" value="${v('email')}" placeholder="例）name@example.com">
+      </div>
+      <div class="intk-row"><label class="ik-l">携帯電話番号</label>
+        <input type="text" id="ik_phone" class="ik-grow" value="${v('phone')}" placeholder="連絡の取れる番号">
+      </div>
+      <div class="intk-note-row">※携帯はインドネシアの番号は不可。難しい場合は勤務先の電話番号を記入してください。</div>
+      <div class="intk-sub">
+        <div class="ik-l" style="margin-bottom:4px">職歴（日本入国後）</div>
+        <div id="ik_wh"></div>
+        <button type="button" class="btn-sm" style="background:var(--graybg)" onclick="addWorkRow()">＋ 職歴を追加</button>
+      </div>
+    </div>
+    <div class="chk-grp">
+      <div class="gh">🏢 所属機関への確認事項</div>
+      <div class="intk-row"><label class="ik-l">年間売上金額</label>
+        <input type="number" id="ik_fac_sales" value="${v('fac_sales')}" style="width:180px"><span class="ik-unit">円</span>
+      </div>
+      <div class="intk-row"><label class="ik-l">常勤職員数</label>
+        <input type="number" id="ik_fac_staff" value="${v('fac_staff')}" style="width:120px"><span class="ik-unit">人</span>
+      </div>
+    </div>
+    <div class="chk-grp" id="careGrp" style="display:${field==="介護"?"block":"none"}">
+      <div class="gh">🩺 介護分野の事業所概要（分野参考様式第1-2号）</div>
+      <div class="intk-row"><label class="ik-l">事業所の名称</label>
+        <input type="text" id="ik_care_office" class="ik-grow" value="${v('care_office')}">
+      </div>
+      <div class="intk-row"><label class="ik-l">受入れ中の1号特定技能外国人数</label>
+        <input type="number" id="ik_care_ssw" value="${v('care_ssw')}" style="width:120px"><span class="ik-unit">人</span>
+      </div>
+      <div class="intk-row"><label class="ik-l">常勤の介護職員数（合計）</label>
+        <input type="number" id="ik_care_total" value="${v('care_total')}" style="width:120px"><span class="ik-unit">人</span>
+      </div>
+      <div class="intk-row"><label class="ik-l care-sub">└ 日本人</label><input type="number" id="ik_care_jp" value="${v('care_jp')}" style="width:100px"><span class="ik-unit">人</span></div>
+      <div class="intk-row"><label class="ik-l care-sub">└ EPA介護福祉士（国家試験合格）</label><input type="number" id="ik_care_epa" value="${v('care_epa')}" style="width:100px"><span class="ik-unit">人</span></div>
+      <div class="intk-row"><label class="ik-l care-sub">└ 在留資格「介護」により在留する者</label><input type="number" id="ik_care_zairyu" value="${v('care_zairyu')}" style="width:100px"><span class="ik-unit">人</span></div>
+      <div class="intk-row"><label class="ik-l care-sub">└ 身分・地位に基づく在留資格</label><input type="number" id="ik_care_mibun" value="${v('care_mibun')}" style="width:100px"><span class="ik-unit">人</span></div>
+    </div>`;
+  const wh=(data.work_history&&data.work_history.length)?data.work_history:[];
+  wh.forEach(w=>addWorkRow(w));
+}
+function onFieldChange(){
+  const f=document.getElementById("ik_field").value;
+  const g=document.getElementById("careGrp"); if(g) g.style.display = f==="介護"?"block":"none";
+}
+function addWorkRow(w){
+  w=(w&&typeof w==="object")?w:{};
+  const box=document.getElementById("ik_wh"); if(!box) return;
+  const row=document.createElement("div"); row.className="wh-row";
+  row.innerHTML=`<input type="text" class="wh-company" placeholder="会社・施設名" value="${esc(w.company||"")}">
+    <input type="month" class="wh-from" value="${esc(w.from||"")}" title="入社年月">
+    <span class="wh-tilde">〜</span>
+    <input type="month" class="wh-to" value="${esc(w.to||"")}" title="退社年月">
+    <button type="button" class="wh-del" title="削除" onclick="this.parentElement.remove()">✕</button>`;
+  box.appendChild(row);
+}
+function collectIntake(){
+  if(!document.getElementById("ik_field")) return {};
+  const g=id=>{ const e=document.getElementById(id); return e?String(e.value).trim():""; };
+  const sp=document.querySelector('input[name="ik_spouse"]:checked');
+  const wh=[];
+  document.querySelectorAll("#ik_wh .wh-row").forEach(r=>{
+    const c=r.querySelector(".wh-company").value.trim();
+    const f=r.querySelector(".wh-from").value;
+    const t=r.querySelector(".wh-to").value;
+    if(c||f||t) wh.push({company:c, from:f, to:t});
+  });
+  const out={ field:g("ik_field")||"その他", spouse:sp?sp.value:"",
+    landing_date:g("ik_landing_date"), email:g("ik_email"), phone:g("ik_phone"),
+    work_history:wh, fac_sales:g("ik_fac_sales"), fac_staff:g("ik_fac_staff") };
+  if(out.field==="介護"){
+    out.care_office=g("ik_care_office"); out.care_ssw=g("ik_care_ssw");
+    out.care_total=g("ik_care_total"); out.care_jp=g("ik_care_jp"); out.care_epa=g("ik_care_epa");
+    out.care_zairyu=g("ik_care_zairyu"); out.care_mibun=g("ik_care_mibun");
   }
   return out;
 }
@@ -767,6 +920,7 @@ function openForm(id){
   const vt=m?.visa_type||"特定技能";
   const mVisa=document.getElementById("mVisa"); mVisa.value=vt; mVisa.dataset.prev=vt;
   renderChecklist(vt, m?.checklist||{});
+  renderIntakeFor(vt, m?.intake||{});
   const driveSec=document.getElementById("driveSec");
   driveSec.style.display=(m&&m.id&&GAS_EXPORT_URL)?"block":"none";
   document.getElementById("driveMsg").textContent="";
@@ -843,6 +997,7 @@ async function saveItem(){
       rakuvisa_id:document.getElementById("mRak").value.trim()||null,
       memo:document.getElementById("mMemo").value.trim()||null,
       checklist:collectChecklist(visaType),
+      intake:collectIntake(),
     };
     const status=document.getElementById("mStatus").value;
     const createNext = status==="完了" && document.getElementById("mCreateNext").checked;
@@ -857,7 +1012,8 @@ async function saveItem(){
         nickname:document.getElementById("mNick").value.trim()||null,
         facility_unit:document.getElementById("mFacUnit").value.trim()||null,
         visa_type:visaType, renewal_count:nextCount(document.getElementById("mCount").value),
-        method:document.getElementById("mMethod").value, status:"次回待ち", checklist:{} };
+        method:document.getElementById("mMethod").value, status:"次回待ち", checklist:{},
+        intake:{field:(collectIntake().field||"その他")} };
       const r2=await sb.from("visa_renewals").insert(nextRec);
       if(r2.error)throw r2.error;
     }
