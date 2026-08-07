@@ -452,15 +452,7 @@ function renderChecklist(visaType, data){
   const sec=document.getElementById("chkSec");
   const tmpl=CHECKLISTS[visaType];
   if(!tmpl){ sec.innerHTML=`<h3>提出書類チェック</h3><p class="note">この在留資格のチェックリストは今後追加予定です。</p>`; return; }
-  const msgBox=`<h3>依頼メッセージ</h3><p class="note">まず最初に、必要書類を人材・所属機関へ依頼します（まだ届いていない書類を自動で一覧化）。届いたら下の「提出書類チェック」で確認します。</p>
-    <div class="msg-box">
-      <div class="msg-btns">
-        <button type="button" class="btn-sm msg-w" onclick="copyMsg('worker')">📋 人材向けをコピー（日本語＋インドネシア語）</button>
-        <button type="button" class="btn-sm msg-o" onclick="copyMsg('org')">📋 所属機関向けをコピー</button>
-      </div>
-      <div id="copyMsg" class="msg-ok"></div>
-    </div>`;
-  let html=msgBox+`<h3 style="margin-top:16px">提出書類チェック</h3><p class="note">①ファイルを「アップロード」<b>または各行にドラッグ&ドロップ</b>＝<b>添付済（未確認）</b>。②中身を開いて内容を確認したら<b>チェック</b>を入れて<b>確認済</b>に。※アップロードだけでは確認済みになりません。</p><div id="chkProg"></div>`;
+  let html=`<h3>提出書類チェック</h3><p class="note">人材が「記入リンク」からアップロードするか、各項目に「アップロード」／ドラッグ&ドロップで登録します。①アップロード＝<b>添付済（未確認）</b> → ②中身を確認して<b>チェック</b>＝<b>確認済</b>。（人材・施設への依頼は下の「🔗 記入リンク」から送ります）</p><div id="chkProg"></div>`;
   for(const party of Object.keys(tmpl)){
     if(!tmpl[party] || !tmpl[party].length) continue;   // 空グループ（所属機関=書類なし）はスキップ
     html+=`<div class="chk-grp"><div class="gh">${PARTY_LABEL[party]}</div>`;
@@ -605,7 +597,7 @@ function renderIntake(data){
   const field=data.field||"その他";
   const v=k=>esc(data[k]!=null?data[k]:"");
   sec.innerHTML=`<h3>確認事項（人材・所属機関に確認する情報）</h3>
-    <p class="note">書類の代わりに確認が必要な情報です。分かった項目から入力してください（依頼メッセージにも自動反映されます）。</p>
+    <p class="note">書類の代わりに確認が必要な情報です。スタッフが直接入力するほか、下の「🔗 記入リンク」を送れば本人・施設が入力した内容もここに反映されます。</p>
     <div class="chk-grp">
       <div class="intk-row"><label class="ik-l">特定技能の分野</label>
         <select id="ik_field" onchange="onFieldChange()">
@@ -665,12 +657,12 @@ function renderIntake(data){
     </div>
     <div class="chk-grp" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px">
       <div class="gh">🔗 記入リンク（本人・施設に直接入力してもらう）</div>
-      <p class="note">リンクを発行して、人材にはWhatsApp、施設にはメールで送付。相手がログイン不要で直接入力でき、この案件に反映されます。</p>
+      <p class="note">ボタンを押すと、<b>リンク入りの依頼文</b>がコピーされます。人材用は<b>WhatsApp</b>（日本語＋インドネシア語）、施設用は<b>メール</b>にそのまま貼り付けて送ってください。相手はログイン不要で記入・アップロードでき、この案件に反映されます。</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn-sm" style="background:#16a34a;color:#fff" onclick="issueIntakeLink('worker')">🔗 人材用リンクを発行・コピー</button>
-        <button type="button" class="btn-sm" style="background:#0ea5e9;color:#fff" onclick="issueIntakeLink('org')">🔗 施設用リンクを発行・コピー</button>
+        <button type="button" class="btn-sm" style="background:#16a34a;color:#fff" onclick="issueIntakeLink('worker')">📋 人材用の依頼文（リンク付き）をコピー</button>
+        <button type="button" class="btn-sm" style="background:#0ea5e9;color:#fff" onclick="issueIntakeLink('org')">📋 施設用の依頼文（リンク付き）をコピー</button>
       </div>
-      <div id="ikLinkMsg" class="msg-ok" style="margin-top:8px;min-height:15px;word-break:break-all"></div>
+      <div id="ikLinkMsg" class="msg-ok" style="margin-top:8px;min-height:15px"></div>
     </div>`;
   const wh=(data.work_history&&data.work_history.length)?data.work_history:[];
   wh.forEach(w=>addWorkRow(w));
@@ -682,7 +674,32 @@ function onFieldChange(){
 // 金額を3桁カンマ区切りで表示（保存は数字のみ）
 function fmtComma(s){ const d=String(s==null?"":s).replace(/[^\d]/g,""); return d?d.replace(/\B(?=(\d{3})+(?!\d))/g,","):""; }
 function onSalesInput(el){ el.value=fmtComma(el.value); }
-// 記入リンクを発行（トークンを作成・保存してURLをコピー）
+// 記入リンクの依頼文（リンク入り）を組み立て
+function buildInviteMsg(party, url){
+  const official=(document.getElementById("mPerson").value||"").trim();
+  const nick=(document.getElementById("mNick").value||"").trim();
+  const fac=(document.getElementById("mFacNew").value.trim()||document.getElementById("mFac").value||"（貴社）");
+  if(party==="worker"){
+    const name=nick||official||"（お名前）";
+    const jp=[`${name}さん、こんにちは。StarBoardです。`,
+      "在留資格（ビザ）の更新手続きのため、下記のフォームから、必要な情報のご記入と書類のアップロードをお願いします。","",
+      "▼ 入力フォーム（スマートフォンから入力できます）", url, "",
+      "分かるものから順にご記入いただいて大丈夫です。ご不明な点があればお気軽にご連絡ください。よろしくお願いいたします。"].join("\n");
+    const id=[`Halo ${name}, ini dari StarBoard.`,
+      "Untuk proses perpanjangan status tinggal (visa), mohon isi informasi yang diperlukan dan unggah dokumen melalui formulir di bawah ini.","",
+      "▼ Formulir pengisian (dapat diisi melalui ponsel cerdas)", url, "",
+      "Silakan isi mulai dari yang Anda pahami terlebih dahulu. Jika ada hal yang kurang jelas, jangan ragu untuk menghubungi kami. Terima kasih atas kerjasamanya."].join("\n");
+    return jp+"\n\n———————————\n\n"+id;
+  } else {
+    const name=official||nick||"（お名前）";
+    return [`${fac} ご担当者様`,"",
+      "いつもお世話になっております。株式会社StarBoardです。",
+      `${name}様の在留資格（特定技能）の更新手続きにあたり、下記のフォームからご回答をお願いいたします。`,"",
+      "▼ 入力フォーム", url, "",
+      "お手数をおかけしますが、よろしくお願いいたします。"].join("\n");
+  }
+}
+// 記入リンクを発行し、リンク入りの依頼文をコピー
 async function issueIntakeLink(party){
   const id=document.getElementById("mId").value;
   const msg=document.getElementById("ikLinkMsg");
@@ -697,9 +714,11 @@ async function issueIntakeLink(party){
   }
   const base=location.origin + location.pathname.replace(/[^/]*$/,"");
   const url=base+"intake.html?party="+party+"&token="+encodeURIComponent(token);
-  try{ await navigator.clipboard.writeText(url); }
-  catch(e){ const ta=document.createElement("textarea"); ta.value=url; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); try{document.execCommand("copy");}catch(_){}; ta.remove(); }
-  if(msg){ msg.style.color="var(--grn)"; msg.innerHTML=`✓ ${party==="worker"?"人材用":"施設用"}リンクをコピーしました：<br><a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`; }
+  const text=buildInviteMsg(party, url);
+  try{ await navigator.clipboard.writeText(text); }
+  catch(e){ const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); try{document.execCommand("copy");}catch(_){}; ta.remove(); }
+  if(msg){ msg.style.color="var(--grn)";
+    msg.innerHTML=`✓ ${party==="worker"?"人材用（WhatsApp用・日本語＋インドネシア語）":"施設用（メール用）"}の依頼文をコピーしました。そのまま貼り付けて送ってください。`; }
 }
 function addWorkRow(w){
   w=(w&&typeof w==="object")?w:{};
