@@ -662,6 +662,15 @@ function renderIntake(data){
       <div class="intk-row"><label class="ik-l care-sub">└ EPA介護福祉士（国家試験合格）</label><input type="number" id="ik_care_epa" value="${v('care_epa')}" style="width:100px"><span class="ik-unit">人</span></div>
       <div class="intk-row"><label class="ik-l care-sub">└ 在留資格「介護」により在留する者</label><input type="number" id="ik_care_zairyu" value="${v('care_zairyu')}" style="width:100px"><span class="ik-unit">人</span></div>
       <div class="intk-row"><label class="ik-l care-sub">└ 身分・地位に基づく在留資格</label><input type="number" id="ik_care_mibun" value="${v('care_mibun')}" style="width:100px"><span class="ik-unit">人</span></div>
+    </div>
+    <div class="chk-grp" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px">
+      <div class="gh">🔗 記入リンク（本人・施設に直接入力してもらう）</div>
+      <p class="note">リンクを発行して、人材にはWhatsApp、施設にはメールで送付。相手がログイン不要で直接入力でき、この案件に反映されます。</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn-sm" style="background:#16a34a;color:#fff" onclick="issueIntakeLink('worker')">🔗 人材用リンクを発行・コピー</button>
+        <button type="button" class="btn-sm" style="background:#0ea5e9;color:#fff" onclick="issueIntakeLink('org')">🔗 施設用リンクを発行・コピー</button>
+      </div>
+      <div id="ikLinkMsg" class="msg-ok" style="margin-top:8px;min-height:15px;word-break:break-all"></div>
     </div>`;
   const wh=(data.work_history&&data.work_history.length)?data.work_history:[];
   wh.forEach(w=>addWorkRow(w));
@@ -673,6 +682,25 @@ function onFieldChange(){
 // 金額を3桁カンマ区切りで表示（保存は数字のみ）
 function fmtComma(s){ const d=String(s==null?"":s).replace(/[^\d]/g,""); return d?d.replace(/\B(?=(\d{3})+(?!\d))/g,","):""; }
 function onSalesInput(el){ el.value=fmtComma(el.value); }
+// 記入リンクを発行（トークンを作成・保存してURLをコピー）
+async function issueIntakeLink(party){
+  const id=document.getElementById("mId").value;
+  const msg=document.getElementById("ikLinkMsg");
+  if(!id){ if(msg){msg.style.color="#b91c1c"; msg.textContent="先に「保存」してからリンクを発行してください。";} return; }
+  const row=ROWS.find(x=>x.id===id);
+  let token=row&&row.intake_token;
+  if(!token){
+    token=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2)).replace(/-/g,"");
+    const {error}=await sb.from("visa_renewals").update({intake_token:token}).eq("id",id);
+    if(error){ if(msg){msg.style.color="#b91c1c"; msg.textContent="発行に失敗: "+error.message;} return; }
+    if(row) row.intake_token=token;
+  }
+  const base=location.origin + location.pathname.replace(/[^/]*$/,"");
+  const url=base+"intake.html?party="+party+"&token="+encodeURIComponent(token);
+  try{ await navigator.clipboard.writeText(url); }
+  catch(e){ const ta=document.createElement("textarea"); ta.value=url; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); try{document.execCommand("copy");}catch(_){}; ta.remove(); }
+  if(msg){ msg.style.color="var(--grn)"; msg.innerHTML=`✓ ${party==="worker"?"人材用":"施設用"}リンクをコピーしました：<br><a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`; }
+}
 function addWorkRow(w){
   w=(w&&typeof w==="object")?w:{};
   const box=document.getElementById("ik_wh"); if(!box) return;

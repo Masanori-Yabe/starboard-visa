@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>確認事項の入力 | StarBoard</title>
+<style>
+  :root{--navy:#1e40af;--blued:#2563eb;--ink:#1f2937;--sub:#6b7280;--line:#d1d5db;--grn:#16a34a;--grnbg:#dcfce7;--bg:#f1f5f9;--card:#fff;--amb:#b45309;--ambbg:#fef3c7;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif;background:var(--bg);color:var(--ink);line-height:1.6}
+  .wrap{max-width:640px;margin:0 auto;padding:16px}
+  header{background:var(--navy);color:#fff;padding:16px;border-radius:0 0 12px 12px}
+  header .t{font-size:18px;font-weight:700}
+  header .s{font-size:13px;opacity:.9;margin-top:4px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:14px}
+  h2{font-size:15px;color:var(--navy);margin:0 0 10px;border-bottom:2px solid var(--grnbg);padding-bottom:6px}
+  .fld{margin-bottom:14px}
+  .fld label.q{display:block;font-size:14px;font-weight:700;margin-bottom:5px}
+  .fld .note{font-size:12px;color:var(--sub);margin:2px 0 6px}
+  .fld .warn{font-size:12px;color:var(--amb);background:var(--ambbg);border-radius:6px;padding:5px 8px;margin:2px 0 6px}
+  input[type=text],input[type=email],input[type=date],input[type=number],input[type=month]{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:16px}
+  .unit{font-size:13px;color:var(--sub);margin-left:6px}
+  .radio{display:inline-flex;align-items:center;gap:5px;margin-right:16px;font-size:15px}
+  .radio input{width:18px;height:18px}
+  .imp{font-size:11px;font-weight:700;color:#fff;background:#dc2626;border-radius:5px;padding:1px 6px;margin-left:6px}
+  .wh{border:1px dashed var(--line);border-radius:8px;padding:10px;margin-bottom:8px}
+  .wh input{margin-bottom:6px}
+  .wh .row2{display:flex;gap:8px}
+  .wh .row2>div{flex:1}
+  .wh .lbl{font-size:11px;color:var(--sub)}
+  .wh-del{background:none;border:none;color:#dc2626;font-size:13px;cursor:pointer;padding:0}
+  .btn{display:block;width:100%;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer}
+  .btn-add{background:var(--bg);color:var(--ink);border:1px solid var(--line);padding:10px;margin-bottom:8px}
+  .btn-go{background:var(--grn);color:#fff;margin-top:8px}
+  .btn-go:disabled{opacity:.5}
+  .msg{margin-top:12px;font-size:14px;font-weight:700;text-align:center;min-height:20px}
+  .msg.ok{color:var(--grn)}
+  .msg.err{color:#dc2626}
+  .center{text-align:center;padding:40px 16px;color:var(--sub)}
+  .done-box{text-align:center;padding:30px 16px}
+  .done-box .big{font-size:40px}
+  .care-sub label.q{padding-left:12px;color:var(--sub);font-weight:400}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div class="t">在留資格の更新手続き</div><div class="s">株式会社StarBoard</div></header>
+  <div id="body"><div class="center">読み込み中…</div></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL="https://oentffklzflubrhxomfn.supabase.co";
+const SUPABASE_ANON_KEY="sb_publishable__uz-Vm3FUPgAeKJC2UYQhA_jp4hwu48";
+const sb=supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const P=new URLSearchParams(location.search);
+const PARTY=P.get("party")==="org"?"org":"worker";
+const TOKEN=P.get("token")||"";
+let DATA=null;
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function fmtComma(s){const d=String(s==null?"":s).replace(/[^\d]/g,"");return d?d.replace(/\B(?=(\d{3})+(?!\d))/g,","):"";}
+
+async function init(){
+  const body=document.getElementById("body");
+  if(!TOKEN){ body.innerHTML=`<div class="center">リンクが正しくありません。担当者にご連絡ください。</div>`; return; }
+  const {data,error}=await sb.rpc("get_intake",{p_token:TOKEN});
+  if(error||!data){ body.innerHTML=`<div class="center">このリンクは無効か、期限切れです。<br>担当者にご連絡ください。</div>`; return; }
+  DATA=data; const intake=data.intake||{};
+  const who = PARTY==="worker"
+    ? (data.nickname||data.person_name||"ご本人")+" 様"
+    : (data.facility_name||"貴社")+" ご担当者様";
+  let html=`<div class="card"><div style="font-size:14px">${esc(who)}</div>
+    <div class="note" style="font-size:13px;color:var(--sub);margin-top:4px">在留資格（特定技能）の更新手続きのため、以下をご記入のうえ「送信」を押してください。</div></div>`;
+  html+= PARTY==="worker" ? workerForm(intake) : orgForm(intake);
+  html+=`<button class="btn btn-go" id="go" onclick="submitForm()">送信する</button><div class="msg" id="msg"></div>`;
+  body.innerHTML=html;
+  if(PARTY==="worker"){ const wh=(intake.work_history&&intake.work_history.length)?intake.work_history:[]; wh.forEach(w=>addWH(w)); }
+}
+
+function workerForm(k){
+  return `<div class="card"><h2>ご本人について</h2>
+    <div class="fld"><label class="q">配偶者の有無</label>
+      <label class="radio"><input type="radio" name="spouse" value="有" ${k.spouse==="有"?"checked":""}> 有（既婚）</label>
+      <label class="radio"><input type="radio" name="spouse" value="無" ${k.spouse==="無"?"checked":""}> 無（未婚）</label></div>
+    <div class="fld"><label class="q">上陸許可年月日 <span class="imp">重要</span></label>
+      <div class="note">初めて日本への上陸を許可された年月日</div>
+      <input type="date" id="landing_date" value="${esc(k.landing_date||"")}"></div>
+    <div class="fld"><label class="q">メールアドレス</label>
+      <input type="email" id="email" value="${esc(k.email||"")}" placeholder="name@example.com"></div>
+    <div class="fld"><label class="q">連絡の取れる携帯電話番号</label>
+      <div class="warn">※インドネシアの電話番号は使えません。難しい場合は勤務先の電話番号をご記入ください。</div>
+      <input type="text" id="phone" value="${esc(k.phone||"")}" placeholder="090-1234-5678"></div>
+    <div class="fld"><label class="q">日本に入国してからの職歴</label>
+      <div class="note">勤務先の名称・入社年月・退社年月。複数ある場合は「＋ 職歴を追加」ですべてご記入ください。</div>
+      <div id="wh"></div>
+      <button type="button" class="btn btn-add" onclick="addWH()">＋ 職歴を追加</button></div>
+  </div>`;
+}
+function addWH(w){
+  w=(w&&typeof w==="object")?w:{};
+  const box=document.getElementById("wh"); if(!box) return;
+  const d=document.createElement("div"); d.className="wh";
+  d.innerHTML=`<input type="text" class="wh-c" placeholder="会社・施設名" value="${esc(w.company||"")}">
+    <div class="row2">
+      <div><div class="lbl">入社年月</div><input type="month" class="wh-f" value="${esc(w.from||"")}"></div>
+      <div><div class="lbl">退社年月</div><input type="month" class="wh-t" value="${esc(w.to||"")}"></div>
+    </div>
+    <button type="button" class="wh-del" onclick="this.parentElement.remove()">✕ この職歴を削除</button>`;
+  box.appendChild(d);
+}
+function orgForm(k){
+  const care = (DATA.intake&&DATA.intake.field)==="介護";
+  let h=`<div class="card"><h2>事業所について</h2>
+    <div class="fld"><label class="q">年間売上金額</label>
+      <input type="text" inputmode="numeric" id="fac_sales" value="${esc(fmtComma(k.fac_sales))}" oninput="this.value=fmtComma(this.value)"><span class="unit">円</span></div>
+    <div class="fld"><label class="q">常勤職員数</label>
+      <input type="number" id="fac_staff" value="${esc(k.fac_staff||"")}" style="max-width:160px"><span class="unit">人</span></div>
+  </div>`;
+  if(care){
+    h+=`<div class="card"><h2>介護分野の事業所概要（分野参考様式第1-2号）</h2>
+      <div class="fld"><label class="q">事業所の名称</label><input type="text" id="care_office" value="${esc(k.care_office||"")}"></div>
+      <div class="fld"><label class="q">現在受け入れている1号特定技能外国人の数</label><input type="number" id="care_ssw" value="${esc(k.care_ssw||"")}" style="max-width:160px"><span class="unit">人</span></div>
+      <div class="fld"><label class="q">日本人等の常勤の介護職員の数（合計）</label><input type="number" id="care_total" value="${esc(k.care_total||"")}" style="max-width:160px"><span class="unit">人</span></div>
+      <div class="fld care-sub"><label class="q">└ うち 日本人</label><input type="number" id="care_jp" value="${esc(k.care_jp||"")}" style="max-width:140px"><span class="unit">人</span></div>
+      <div class="fld care-sub"><label class="q">└ うち EPA介護福祉士（国家試験合格）</label><input type="number" id="care_epa" value="${esc(k.care_epa||"")}" style="max-width:140px"><span class="unit">人</span></div>
+      <div class="fld care-sub"><label class="q">└ うち 在留資格「介護」により在留する者</label><input type="number" id="care_zairyu" value="${esc(k.care_zairyu||"")}" style="max-width:140px"><span class="unit">人</span></div>
+      <div class="fld care-sub"><label class="q">└ うち 身分・地位に基づく在留資格により在留する者</label><input type="number" id="care_mibun" value="${esc(k.care_mibun||"")}" style="max-width:140px"><span class="unit">人</span></div>
+    </div>`;
+  }
+  return h;
+}
+
+function collect(){
+  const g=id=>{const e=document.getElementById(id);return e?String(e.value).trim():"";};
+  if(PARTY==="worker"){
+    const sp=document.querySelector('input[name="spouse"]:checked');
+    const wh=[];
+    document.querySelectorAll("#wh .wh").forEach(r=>{
+      const c=r.querySelector(".wh-c").value.trim(), f=r.querySelector(".wh-f").value, t=r.querySelector(".wh-t").value;
+      if(c||f||t) wh.push({company:c,from:f,to:t});
+    });
+    return {spouse:sp?sp.value:"", landing_date:g("landing_date"), email:g("email"), phone:g("phone"), work_history:wh};
+  } else {
+    const o={fac_sales:g("fac_sales").replace(/[^\d]/g,""), fac_staff:g("fac_staff")};
+    if((DATA.intake&&DATA.intake.field)==="介護"){
+      ["care_office","care_ssw","care_total","care_jp","care_epa","care_zairyu","care_mibun"].forEach(k=>o[k]=g(k));
+    }
+    return o;
+  }
+}
+async function submitForm(){
+  const btn=document.getElementById("go"), msg=document.getElementById("msg");
+  btn.disabled=true; msg.className="msg"; msg.textContent="送信中…";
+  try{
+    const {data,error}=await sb.rpc("submit_intake",{p_token:TOKEN, p_party:PARTY, p_data:collect()});
+    if(error) throw error;
+    if(!data) throw new Error("リンクが無効です");
+    document.getElementById("body").innerHTML=`<div class="card done-box"><div class="big">✅</div>
+      <div style="font-size:16px;font-weight:700;margin-top:8px">送信が完了しました</div>
+      <div style="font-size:13px;color:var(--sub);margin-top:8px">ご協力ありがとうございました。<br>内容はStarBoardが確認いたします。</div></div>`;
+    window.scrollTo(0,0);
+  }catch(e){
+    msg.className="msg err"; msg.textContent="送信に失敗しました: "+(e.message||e); btn.disabled=false;
+  }
+}
+init();
+</script>
+</body>
+</html>
