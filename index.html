@@ -641,7 +641,7 @@ function renderIntake(data){
     <div class="chk-grp">
       <div class="gh">🏢 所属機関への確認事項</div>
       <div class="intk-row"><label class="ik-l">年間売上金額</label>
-        <input type="number" id="ik_fac_sales" value="${v('fac_sales')}" style="width:180px"><span class="ik-unit">円</span>
+        <input type="text" inputmode="numeric" id="ik_fac_sales" value="${esc(fmtComma(data.fac_sales))}" oninput="onSalesInput(this)" style="width:180px"><span class="ik-unit">円</span>
       </div>
       <div class="intk-row"><label class="ik-l">常勤職員数</label>
         <input type="number" id="ik_fac_staff" value="${v('fac_staff')}" style="width:120px"><span class="ik-unit">人</span>
@@ -670,6 +670,9 @@ function onFieldChange(){
   const f=document.getElementById("ik_field").value;
   const g=document.getElementById("careGrp"); if(g) g.style.display = f==="介護"?"block":"none";
 }
+// 金額を3桁カンマ区切りで表示（保存は数字のみ）
+function fmtComma(s){ const d=String(s==null?"":s).replace(/[^\d]/g,""); return d?d.replace(/\B(?=(\d{3})+(?!\d))/g,","):""; }
+function onSalesInput(el){ el.value=fmtComma(el.value); }
 function addWorkRow(w){
   w=(w&&typeof w==="object")?w:{};
   const box=document.getElementById("ik_wh"); if(!box) return;
@@ -694,7 +697,7 @@ function collectIntake(){
   });
   const out={ field:g("ik_field")||"その他", spouse:sp?sp.value:"",
     landing_date:g("ik_landing_date"), email:g("ik_email"), phone:g("ik_phone"),
-    work_history:wh, fac_sales:g("ik_fac_sales"), fac_staff:g("ik_fac_staff") };
+    work_history:wh, fac_sales:g("ik_fac_sales").replace(/[^\d]/g,""), fac_staff:g("ik_fac_staff") };
   if(out.field==="介護"){
     out.care_office=g("ik_care_office"); out.care_ssw=g("ik_care_ssw");
     out.care_total=g("ik_care_total"); out.care_jp=g("ik_care_jp"); out.care_epa=g("ik_care_epa");
