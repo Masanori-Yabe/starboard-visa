@@ -147,24 +147,25 @@ function addWH(w){
 }
 function orgForm(k){
   const care = (DATA.intake&&DATA.intake.field)==="介護";
-  let h=`<div class="card"><h2>事業所について</h2>
+  return `<div class="card"><h2>事業所について</h2>
+    <div class="fld"><label class="q">介護分野の事業所ですか？</label>
+      <label class="radio"><input type="radio" name="is_care" value="yes" ${care?"checked":""} onchange="toggleCare()"> はい</label>
+      <label class="radio"><input type="radio" name="is_care" value="no" ${!care?"checked":""} onchange="toggleCare()"> いいえ</label>
+      <div class="note">「はい」の場合、下に表示される「介護分野の事業所概要」もご記入ください。</div></div>
     <div class="fld"><label class="q">年間売上金額</label>
       <input type="text" inputmode="numeric" id="fac_sales" value="${esc(fmtComma(k.fac_sales))}" oninput="this.value=fmtComma(this.value)"><span class="unit">円</span></div>
     <div class="fld"><label class="q">常勤職員数</label>
       <input type="number" id="fac_staff" value="${esc(k.fac_staff||"")}" style="max-width:160px"><span class="unit">人</span></div>
+  </div>
+  <div class="card" id="careCard" style="display:${care?"block":"none"}"><h2>介護分野の事業所概要（分野参考様式第1-2号）</h2>
+    <div class="fld"><label class="q">事業所の名称</label><input type="text" id="care_office" value="${esc(k.care_office||"")}"></div>
+    <div class="fld"><label class="q">現在受け入れている1号特定技能外国人の数</label><input type="number" id="care_ssw" value="${esc(k.care_ssw||"")}" style="max-width:160px"><span class="unit">人</span></div>
+    <div class="fld"><label class="q">日本人等の常勤の介護職員の数（合計）</label><input type="number" id="care_total" value="${esc(k.care_total||"")}" style="max-width:160px"><span class="unit">人</span></div>
+    <div class="fld care-sub"><label class="q">└ うち 日本人</label><input type="number" id="care_jp" value="${esc(k.care_jp||"")}" style="max-width:140px"><span class="unit">人</span></div>
+    <div class="fld care-sub"><label class="q">└ うち EPA介護福祉士（国家試験合格）</label><input type="number" id="care_epa" value="${esc(k.care_epa||"")}" style="max-width:140px"><span class="unit">人</span></div>
+    <div class="fld care-sub"><label class="q">└ うち 在留資格「介護」により在留する者</label><input type="number" id="care_zairyu" value="${esc(k.care_zairyu||"")}" style="max-width:140px"><span class="unit">人</span></div>
+    <div class="fld care-sub"><label class="q">└ うち 身分・地位に基づく在留資格により在留する者</label><input type="number" id="care_mibun" value="${esc(k.care_mibun||"")}" style="max-width:140px"><span class="unit">人</span></div>
   </div>`;
-  if(care){
-    h+=`<div class="card"><h2>介護分野の事業所概要（分野参考様式第1-2号）</h2>
-      <div class="fld"><label class="q">事業所の名称</label><input type="text" id="care_office" value="${esc(k.care_office||"")}"></div>
-      <div class="fld"><label class="q">現在受け入れている1号特定技能外国人の数</label><input type="number" id="care_ssw" value="${esc(k.care_ssw||"")}" style="max-width:160px"><span class="unit">人</span></div>
-      <div class="fld"><label class="q">日本人等の常勤の介護職員の数（合計）</label><input type="number" id="care_total" value="${esc(k.care_total||"")}" style="max-width:160px"><span class="unit">人</span></div>
-      <div class="fld care-sub"><label class="q">└ うち 日本人</label><input type="number" id="care_jp" value="${esc(k.care_jp||"")}" style="max-width:140px"><span class="unit">人</span></div>
-      <div class="fld care-sub"><label class="q">└ うち EPA介護福祉士（国家試験合格）</label><input type="number" id="care_epa" value="${esc(k.care_epa||"")}" style="max-width:140px"><span class="unit">人</span></div>
-      <div class="fld care-sub"><label class="q">└ うち 在留資格「介護」により在留する者</label><input type="number" id="care_zairyu" value="${esc(k.care_zairyu||"")}" style="max-width:140px"><span class="unit">人</span></div>
-      <div class="fld care-sub"><label class="q">└ うち 身分・地位に基づく在留資格により在留する者</label><input type="number" id="care_mibun" value="${esc(k.care_mibun||"")}" style="max-width:140px"><span class="unit">人</span></div>
-    </div>`;
-  }
-  return h;
 }
 
 function collect(){
@@ -179,11 +180,17 @@ function collect(){
     return {spouse:sp?sp.value:"", landing_date:g("landing_date"), email:g("email"), phone:g("phone"), work_history:wh};
   } else {
     const o={fac_sales:g("fac_sales").replace(/[^\d]/g,""), fac_staff:g("fac_staff")};
-    if((DATA.intake&&DATA.intake.field)==="介護"){
+    const isCare=(document.querySelector('input[name="is_care"]:checked')||{}).value==="yes";
+    if(isCare){
+      o.field="介護";
       ["care_office","care_ssw","care_total","care_jp","care_epa","care_zairyu","care_mibun"].forEach(k=>o[k]=g(k));
     }
     return o;
   }
+}
+function toggleCare(){
+  const yes=(document.querySelector('input[name="is_care"]:checked')||{}).value==="yes";
+  const cc=document.getElementById("careCard"); if(cc) cc.style.display=yes?"block":"none";
 }
 async function submitForm(){
   const btn=document.getElementById("go"), msg=document.getElementById("msg");
