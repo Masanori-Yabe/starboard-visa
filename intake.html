@@ -40,6 +40,9 @@
   .done-box{text-align:center;padding:30px 16px}
   .done-box .big{font-size:40px}
   .care-sub label.q{padding-left:12px;color:var(--sub);font-weight:400}
+  .wdlist{margin-bottom:6px}
+  .wd-item{font-size:13px;color:var(--grn);background:var(--grnbg);border-radius:6px;padding:5px 8px;margin-bottom:4px;word-break:break-all}
+  .wd-empty{font-size:12px;color:var(--sub)}
 </style>
 </head>
 <body>
@@ -55,7 +58,8 @@ const sb=supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const P=new URLSearchParams(location.search);
 const PARTY=P.get("party")==="org"?"org":"worker";
 const TOKEN=P.get("token")||"";
-let DATA=null;
+let DATA=null, CL={};
+const WDOCS=[["photo","証明写真（3か月以内・スマホ可）"],["passport","パスポート（顔写真のページ）"],["card","在留カード（表・裏）"],["gensen","源泉徴収票（直近のもの）"],["kazei","課税証明書（最新年度）"],["nozei","納税証明書（最新年度）"]];
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function fmtComma(s){const d=String(s==null?"":s).replace(/[^\d]/g,"");return d?d.replace(/\B(?=(\d{3})+(?!\d))/g,","):"";}
 
@@ -64,7 +68,7 @@ async function init(){
   if(!TOKEN){ body.innerHTML=`<div class="center">リンクが正しくありません。担当者にご連絡ください。</div>`; return; }
   const {data,error}=await sb.rpc("get_intake",{p_token:TOKEN});
   if(error||!data){ body.innerHTML=`<div class="center">このリンクは無効か、期限切れです。<br>担当者にご連絡ください。</div>`; return; }
-  DATA=data; const intake=data.intake||{};
+  DATA=data; CL=data.checklist||{}; const intake=data.intake||{};
   const who = PARTY==="worker"
     ? (data.nickname||data.person_name||"ご本人")+" 様"
     : (data.facility_name||"貴社")+" ご担当者様";
@@ -73,7 +77,10 @@ async function init(){
   html+= PARTY==="worker" ? workerForm(intake) : orgForm(intake);
   html+=`<button class="btn btn-go" id="go" onclick="submitForm()">送信する</button><div class="msg" id="msg"></div>`;
   body.innerHTML=html;
-  if(PARTY==="worker"){ const wh=(intake.work_history&&intake.work_history.length)?intake.work_history:[]; wh.forEach(w=>addWH(w)); }
+  if(PARTY==="worker"){
+    const wh=(intake.work_history&&intake.work_history.length)?intake.work_history:[]; wh.forEach(w=>addWH(w));
+    WDOCS.forEach(function(d){ renderDocList(d[0]); });
+  }
 }
 
 function workerForm(k){
@@ -93,7 +100,38 @@ function workerForm(k){
       <div class="note">勤務先の名称・入社年月・退社年月。複数ある場合は「＋ 職歴を追加」ですべてご記入ください。</div>
       <div id="wh"></div>
       <button type="button" class="btn btn-add" onclick="addWH()">＋ 職歴を追加</button></div>
+  </div>
+  <div class="card"><h2>提出書類（アップロード）</h2>
+    <div class="note">スマホで撮った写真やPDFをそのままアップロードできます。アップロードは自動で保存されます（複数枚OK）。</div>
+    ${WDOCS.map(function(d){return `<div class="fld">
+      <label class="q">${esc(d[1])}</label>
+      <div id="wd_${d[0]}" class="wdlist"></div>
+      <input type="file" id="wf_${d[0]}" accept="image/*,application/pdf" multiple style="display:none" onchange="uploadWDoc('${d[0]}',this)">
+      <button type="button" class="btn btn-add" onclick="document.getElementById('wf_${d[0]}').click()">⬆ ファイルを選ぶ</button>
+    </div>`;}).join("")}
   </div>`;
+}
+function renderDocList(k){
+  const box=document.getElementById("wd_"+k); if(!box) return;
+  const files=((CL[k]||{}).files)||[];
+  box.innerHTML = files.length
+    ? files.map(function(f){return `<div class="wd-item">✅ ${esc(f.n||"ファイル")}</div>`;}).join("")
+    : `<div class="wd-empty">未アップロード</div>`;
+}
+async function uploadWDoc(k, input){
+  const files=Array.from(input.files||[]); input.value=""; if(!files.length) return;
+  const box=document.getElementById("wd_"+k); if(box) box.innerHTML=`<div class="wd-empty">アップロード中…</div>`;
+  for(let i=0;i<files.length;i++){
+    const file=files[i];
+    const path=`intake/${TOKEN}/${k}/${Date.now()}_${i}`;
+    const up=await sb.storage.from("visa-documents").upload(path,file,{upsert:true,contentType:file.type});
+    if(up.error){ alert("アップロード失敗: "+up.error.message); renderDocList(k); return; }
+    const rec=await sb.rpc("submit_intake_file",{p_token:TOKEN,p_key:k,p_path:path,p_name:file.name});
+    if(rec.error||!rec.data){ alert("記録に失敗しました。もう一度お試しください。"); renderDocList(k); return; }
+    if(!CL[k]) CL[k]={}; if(!CL[k].files) CL[k].files=[];
+    CL[k].files.push({f:path, n:file.name});
+  }
+  renderDocList(k);
 }
 function addWH(w){
   w=(w&&typeof w==="object")?w:{};
